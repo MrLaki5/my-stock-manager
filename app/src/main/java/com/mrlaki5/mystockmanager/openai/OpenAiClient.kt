@@ -163,10 +163,13 @@ class OpenAiClient(
         put("type", "object")
         put("additionalProperties", false)
         putJsonArray("required") {
-            add("description"); add("keywords")
+            add("title"); add("description"); add("keywords")
             add("shutterstock_category"); add("secondary_category")
         }
         putJsonObject("properties") {
+            putJsonObject("title") {
+                put("type", "string")
+            }
             putJsonObject("description") {
                 put("type", "string")
             }

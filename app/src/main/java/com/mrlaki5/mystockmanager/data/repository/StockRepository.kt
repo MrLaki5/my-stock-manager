@@ -9,7 +9,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
-import com.mrlaki5.mystockmanager.metadata.model.EditorialTitle
+import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import com.mrlaki5.mystockmanager.storage.CaptureDate
 import com.mrlaki5.mystockmanager.storage.AppFileStore
@@ -62,9 +62,13 @@ class StockRepository @Inject constructor(
      * JPEG does not carry would be a lie the user cannot see. If the embed fails, nothing
      * is saved and the caller is told why.
      *
-     * The title on [metadata] is ignored and rebuilt. The caption format is an invariant of
-     * the file rather than a suggestion to callers, so it is derived at the one point that
-     * writes it and cannot be bypassed by a screen that forgot.
+     * [metadata] carries the caption *body* as its description. The lead is prepended here
+     * rather than by the caller: the caption format is an invariant of the file rather than
+     * a suggestion, so it is applied at the one point that writes it and cannot be bypassed
+     * by a screen that forgot.
+     *
+     * Returns the metadata as stored in the row, whose description is the body again — not
+     * the assembled caption, which would prepend the lead twice if fed back in.
      */
     suspend fun updateMetadata(imageId: Long, metadata: StockMetadata): Result<StockMetadata> {
         val image = imageDao.getById(imageId)
@@ -72,22 +76,25 @@ class StockRepository @Inject constructor(
         val uri = image.mediaStoreUri?.toUri()
             ?: return Result.failure(IllegalStateException("This image is not in the album"))
 
+        val body = metadata.normalized().description
         val captioned = metadata.copy(
-            title = EditorialTitle.build(
+            description = EditorialCaption.build(
                 location = image.folderId?.let { folderDao.observeById(it).first()?.location },
                 capturedOn = image.capturedOn,
-                description = metadata.description,
+                body = body,
             ),
         )
 
-        return embedder.embed(uri, captioned).onSuccess { written ->
+        return embedder.embed(uri, captioned).map { written ->
+            val stored = written.copy(description = body)
             imageDao.updateMetadata(
                 id = imageId,
-                title = written.title,
-                description = written.description,
-                keywords = written.keywords,
-                category = written.category,
+                title = stored.title,
+                description = stored.description,
+                keywords = stored.keywords,
+                category = stored.category,
             )
+            stored
         }
     }
 

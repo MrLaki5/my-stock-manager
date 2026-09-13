@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.openai
 
+import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
 
@@ -32,11 +33,12 @@ object VisionPrompt {
             appendLine()
             appendLine(
                 "The photographer states this was taken at: $location. Treat it as fact. " +
-                    "It is prepended to the caption automatically, so do not open the " +
-                    "description with it — but do include the place and its sensible broader " +
-                    "terms (for example city, region, country) among the keywords, because " +
-                    "buyers search by place. Do not add landmarks or districts you were not " +
-                    "told about."
+                    "It is prepended to the description automatically, so do not open the " +
+                    "description with it — do work it into the title where it reads " +
+                    "naturally, and include the place and its sensible broader terms (for " +
+                    "example city, region, country) among the keywords, because buyers " +
+                    "search by place. Do not add landmarks or districts you were not told " +
+                    "about."
             )
         }
     }
@@ -44,14 +46,16 @@ object VisionPrompt {
     private val BASE = """
         Produce submission metadata for this image.
 
-        Description: the caption for this photo, one or two sentences, stating plainly what is
-        happening and what is visible. Write it as a factual editorial caption rather than
-        marketing copy: no "stunning", no "breathtaking", no camera settings, no
-        filename-style text. This is the only prose you write and it carries the asset on
-        both marketplaces, so it must stand on its own.
+        Title: a marketable, descriptive title of at most $IPTC_OBJECT_NAME_MAX characters.
+        No keyword stuffing, no camera settings, no filename-style text.
+
+        Description: the body of an editorial caption, one or two sentences, stating plainly
+        what is happening and what is visible. Factual rather than marketing copy: no
+        "stunning", no "breathtaking".
 
         Do not open the description with the place name or the date. The app prepends those
-        itself, and a caption that repeats them reads as a stutter.
+        itself in the agency's caption format, and a caption that repeats them reads as a
+        stutter.
 
         Keywords: between $MIN_KEYWORDS and $MAX_KEYWORDS keywords, ordered by relevance with the
         most important first. Both agencies weight leading keywords most heavily, so the first

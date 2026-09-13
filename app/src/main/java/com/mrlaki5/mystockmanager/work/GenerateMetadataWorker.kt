@@ -9,7 +9,7 @@ import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
 import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
-import com.mrlaki5.mystockmanager.metadata.model.EditorialTitle
+import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.openai.OpenAiClient
 import com.mrlaki5.mystockmanager.openai.OpenAiResult
 import com.mrlaki5.mystockmanager.storage.AppFileStore
@@ -77,14 +77,15 @@ class GenerateMetadataWorker @AssistedInject constructor(
                 is OpenAiResult.Terminal -> fail(imageId, result.message)
 
                 is OpenAiResult.Success -> {
-                    // The model writes the caption body; the app owns its shape. Building
-                    // the title here rather than asking for it is what makes the format
-                    // guaranteed instead of merely requested.
+                    // The model writes the caption body; the app owns the caption's shape.
+                    // Prepending the lead here rather than asking for it is what makes the
+                    // format guaranteed instead of merely requested.
+                    val body = result.metadata.description
                     val captioned = result.metadata.copy(
-                        title = EditorialTitle.build(
+                        description = EditorialCaption.build(
                             location = location,
                             capturedOn = image.capturedOn,
-                            description = result.metadata.description,
+                            body = body,
                         ),
                     )
 
@@ -98,7 +99,10 @@ class GenerateMetadataWorker @AssistedInject constructor(
                     imageDao.saveGenerated(
                         id = imageId,
                         title = written.title,
-                        description = written.description,
+                        // The row keeps the body, the file the assembled caption. Storing
+                        // the assembled form would prepend the lead a second time on the
+                        // next edit.
+                        description = body,
                         keywords = written.keywords,
                         category = written.category,
                         state = ImageState.GENERATED,

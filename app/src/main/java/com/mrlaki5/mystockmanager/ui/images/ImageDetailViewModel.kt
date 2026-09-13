@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
-import com.mrlaki5.mystockmanager.metadata.model.EditorialTitle
+import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,24 +23,25 @@ import javax.inject.Inject
 /**
  * The editable copy of an image's metadata.
  *
- * There is no title here. The title is the editorial caption, derived from the event
- * location, the capture date and the description, so it is computed rather than edited —
- * see [ImageDetailViewModel.title].
+ * [description] is the caption *body*, which is what the row stores. The location and date
+ * are prepended when it is written — see [ImageDetailViewModel.caption].
  */
 data class MetadataDraft(
+    val title: String,
     val description: String,
     val keywords: List<String>,
     val category: String,
 ) {
     /**
-     * Embedding an empty description writes IPTC records that read back as absent rather
-     * than empty, which then fails verification. It is also what the caption is built from,
-     * so an empty one would leave the title as a bare "Belgrade, Serbia - May 23, 2026:".
+     * Embedding an empty title or description writes IPTC records that read back as absent
+     * rather than empty, which then fails verification. An empty body would also leave the
+     * caption as a bare "Belgrade, Serbia - May 23, 2026:".
      */
-    val canSave: Boolean get() = description.isNotBlank()
+    val canSave: Boolean get() = title.isNotBlank() && description.isNotBlank()
 
     companion object {
         fun of(image: ImageEntity) = MetadataDraft(
+            title = image.title.orEmpty(),
             description = image.description.orEmpty(),
             keywords = image.keywords,
             category = image.category.orEmpty(),
@@ -71,15 +72,16 @@ class ImageDetailViewModel @Inject constructor(
     private val _lead = MutableStateFlow<CaptionLead?>(null)
 
     /**
-     * The caption exactly as saving would write it. Recomputed as the description is typed
-     * rather than fetched, so the screen can show the real title live; the repository
-     * derives it again from the same inputs when it writes, so the two cannot disagree.
+     * The description exactly as saving would write it into the file. Recomputed as the body
+     * is typed rather than fetched, so the screen shows the real caption live; the
+     * repository assembles it again from the same inputs when it writes, so the two cannot
+     * disagree.
      */
-    val title: StateFlow<String> = combine(_draft, _lead) { draft, lead ->
-        if (draft == null) "" else EditorialTitle.build(
+    val caption: StateFlow<String> = combine(_draft, _lead) { draft, lead ->
+        if (draft == null) "" else EditorialCaption.build(
             location = lead?.location,
             capturedOn = lead?.capturedOn,
-            description = draft.description,
+            body = draft.description,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
@@ -108,6 +110,8 @@ class ImageDetailViewModel @Inject constructor(
         _draft.value = draft
         _saved.value = draft
     }
+
+    fun setTitle(value: String) = edit { it.copy(title = value) }
 
     fun setDescription(value: String) = edit { it.copy(description = value) }
 
@@ -167,9 +171,8 @@ class ImageDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _busy.value = true
             val request = StockMetadata(
-                // Rebuilt by the repository from the same inputs; passed for coherence
-                // rather than authority.
-                title = title.value,
+                title = draft.title,
+                // The body. The repository prepends the location and date.
                 description = draft.description,
                 keywords = draft.keywords,
                 category = draft.category.trim().takeIf { it.isNotEmpty() },
@@ -180,6 +183,7 @@ class ImageDetailViewModel @Inject constructor(
                     // limits may have clamped it, and the screen should show the truth.
                     seed(
                         MetadataDraft(
+                            title = written.title,
                             description = written.description,
                             keywords = written.keywords,
                             category = written.category.orEmpty(),

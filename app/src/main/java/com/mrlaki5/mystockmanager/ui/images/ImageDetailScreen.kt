@@ -65,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
+import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
 import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
@@ -77,7 +78,7 @@ fun ImageDetailScreen(
 ) {
     val image by viewModel.image.collectAsStateWithLifecycle()
     val draft by viewModel.draft.collectAsStateWithLifecycle()
-    val title by viewModel.title.collectAsStateWithLifecycle()
+    val caption by viewModel.caption.collectAsStateWithLifecycle()
     val dirty by viewModel.dirty.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -207,7 +208,7 @@ fun ImageDetailScreen(
 
                 editable != null -> MetadataEditor(
                     draft = editable,
-                    title = title,
+                    caption = caption,
                     capturedOn = current.capturedOn,
                     viewModel = viewModel,
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -241,7 +242,7 @@ private fun Preview(image: ImageEntity) {
 @Composable
 private fun MetadataEditor(
     draft: MetadataDraft,
-    title: String,
+    caption: String,
     capturedOn: String?,
     viewModel: ImageDetailViewModel,
     modifier: Modifier = Modifier,
@@ -249,7 +250,22 @@ private fun MetadataEditor(
     var editingKeyword by remember { mutableStateOf<Int?>(null) }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        CaptionPreview(title = title, hasDate = capturedOn != null)
+        OutlinedTextField(
+            value = draft.title,
+            onValueChange = viewModel::setTitle,
+            label = { Text("Title") },
+            isError = draft.title.isBlank(),
+            supportingText = {
+                Text(
+                    if (draft.title.isBlank()) {
+                        "A title is required"
+                    } else {
+                        "${draft.title.length} of $IPTC_OBJECT_NAME_MAX characters"
+                    }
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         OutlinedTextField(
             value = draft.description,
@@ -260,14 +276,16 @@ private fun MetadataEditor(
             supportingText = {
                 Text(
                     if (draft.description.isBlank()) {
-                        "A description is required — the title is built from it"
+                        "A description is required"
                     } else {
-                        "${draft.description.length} characters"
+                        "${draft.description.length} characters, before the caption lead"
                     }
                 )
             },
             modifier = Modifier.fillMaxWidth(),
         )
+
+        CaptionPreview(caption = caption, hasDate = capturedOn != null)
 
         KeywordSection(
             keywords = draft.keywords,
@@ -310,23 +328,22 @@ private fun MetadataEditor(
 }
 
 /**
- * The title is not editable because it is not stored copy — it is assembled from the event
- * location, the capture date and the description every time it is written. Showing the
- * assembled result live is more honest than offering a field whose contents the next save
- * would silently replace.
+ * The description as it will actually be written. The field above holds the body; the event
+ * location and capture date are prepended on save, so showing the assembled result is the
+ * only way to see what an agency will receive.
  */
 @Composable
-private fun CaptionPreview(title: String, hasDate: Boolean) {
+private fun CaptionPreview(caption: String, hasDate: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Title",
+                "Caption written to the file",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
             Text(
-                "${title.length} characters",
+                "${caption.length} characters",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -337,18 +354,19 @@ private fun CaptionPreview(title: String, hasDate: Boolean) {
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                title.ifBlank { "—" },
+                caption.ifBlank { "—" },
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(12.dp),
             )
         }
         Text(
             if (hasDate) {
-                "Built from the event location, the date this photo was taken, and the " +
-                    "description below. Edit the description to change it."
+                "The event location and the date this photo was taken are prepended to the " +
+                    "description automatically."
             } else {
-                "Built from the event location and the description below. This photo has " +
-                    "no capture date in its EXIF, so the date is left out rather than guessed."
+                "The event location is prepended to the description automatically. This " +
+                    "photo has no capture date in its EXIF, so the date is left out rather " +
+                    "than guessed."
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -24,10 +24,8 @@ data class VerificationResult(
     val rawXmp: String?,
 ) {
     /**
-     * Each IIM title field is checked against the form that belongs in it rather than
-     * against the full caption: Object Name and Headline have their own octet caps and are
-     * *meant* to differ from it. XMP dc:title is the field held to the caption entire, and
-     * so is the one that proves nothing was lost.
+     * Headline is checked as well as Object Name: both are written, and a field that is
+     * written but never read back is a field that can rot unnoticed.
      */
     fun matches(expected: StockMetadata): List<String> = buildList {
         if (iptcKeywords != expected.keywords) {
@@ -36,8 +34,8 @@ data class VerificationResult(
         if (xmpSubjects != expected.keywords) {
             add("XMP dc:subject differs: wrote ${expected.keywords.size}, read ${xmpSubjects.size}")
         }
-        if (iptcTitle != expected.objectName) add("IPTC Object Name differs: '$iptcTitle'")
-        if (iptcHeadline != expected.headline) add("IPTC Headline differs: '$iptcHeadline'")
+        if (iptcTitle != expected.title) add("IPTC Object Name differs: '$iptcTitle'")
+        if (iptcHeadline != expected.title) add("IPTC Headline differs: '$iptcHeadline'")
         if (xmpTitle != expected.title) add("XMP dc:title differs: '$xmpTitle'")
         if (iptcDescription != expected.description) add("IPTC description differs")
     }

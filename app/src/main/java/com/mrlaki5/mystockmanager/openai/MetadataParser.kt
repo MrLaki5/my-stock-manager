@@ -14,24 +14,22 @@ import kotlinx.serialization.json.jsonPrimitive
  * is respected in practice but is not a guarantee we should hand to an upload. The
  * clamp in [StockMetadata.normalized] is the actual enforcement point.
  *
- * The returned title is empty: it is not something the model produces. See the note on
- * the field below.
+ * The description here is the caption *body*. The caller prepends the location and date
+ * with [com.mrlaki5.mystockmanager.metadata.model.EditorialCaption] before it is written.
  */
 object MetadataParser {
 
     fun parse(content: String, json: Json = Json { ignoreUnknownKeys = true }): StockMetadata? {
         val obj = runCatching { json.parseToJsonElement(content).jsonObject }.getOrNull() ?: return null
 
+        val title = obj["title"]?.jsonPrimitive?.content ?: return null
         val description = obj["description"]?.jsonPrimitive?.content ?: return null
         val keywords = obj["keywords"]?.jsonArray
             ?.mapNotNull { it.jsonPrimitive.content.takeIf(String::isNotBlank) }
             ?: return null
 
         return StockMetadata(
-            // Deliberately empty. The title is the editorial caption, which the app builds
-            // from the location and capture date it holds, so the model is never asked for
-            // it; the caller applies EditorialTitle before this is written anywhere.
-            title = "",
+            title = title,
             description = description,
             keywords = keywords,
             category = obj["shutterstock_category"]?.stringOrNull(),
