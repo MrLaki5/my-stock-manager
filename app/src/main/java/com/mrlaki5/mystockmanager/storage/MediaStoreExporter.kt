@@ -6,6 +6,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
 import java.io.File
+import java.io.InputStream
 
 /**
  * The app's only image store. Every imported image lives in
@@ -70,6 +71,27 @@ class MediaStoreExporter(private val context: Context) {
             destination.outputStream().use { input.copyTo(it) }
         } ?: error("Could not open $uri for reading")
     }
+
+    /** Opens the entry for reading. For callers that only need the header, not the pixels. */
+    fun openInput(uri: Uri): InputStream? = context.contentResolver.openInputStream(uri)
+
+    /**
+     * What MediaStore believes the capture time was, in epoch millis, or null if it does
+     * not know. A fallback for files whose EXIF carries no date of its own; MediaStore
+     * stores -1 rather than null when it has nothing, which is not a time.
+     */
+    fun dateTakenMillis(uri: Uri): Long? = runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(MediaStore.Images.Media.DATE_TAKEN),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (!cursor.moveToFirst() || cursor.isNull(0)) return@use null
+            cursor.getLong(0).takeIf { it > 0 }
+        }
+    }.getOrNull()
 
     fun delete(uri: Uri): Int = context.contentResolver.delete(uri, null, null)
 

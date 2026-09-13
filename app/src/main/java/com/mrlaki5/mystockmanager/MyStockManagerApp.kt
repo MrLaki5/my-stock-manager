@@ -33,6 +33,7 @@ class MyStockManagerApp : Application(), Configuration.Provider {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             runCatching { repository.resetStuckGenerating() }
             runCatching { repository.migrateLegacyPrivateFiles() }
+            runCatching { repository.backfillCaptureDates() }
         }
     }
 }

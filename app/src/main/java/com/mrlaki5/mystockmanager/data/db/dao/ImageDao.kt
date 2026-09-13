@@ -86,4 +86,10 @@ interface ImageDao {
 
     @Query("SELECT * FROM images WHERE mediaStoreUri IS NULL")
     suspend fun getWithoutMediaStoreUri(): List<ImageEntity>
+
+    @Query("SELECT * FROM images WHERE capturedOn IS NULL AND mediaStoreUri IS NOT NULL")
+    suspend fun getWithoutCaptureDate(): List<ImageEntity>
+
+    @Query("UPDATE images SET capturedOn = :capturedOn WHERE id = :id")
+    suspend fun setCapturedOn(id: Long, capturedOn: String?)
 }

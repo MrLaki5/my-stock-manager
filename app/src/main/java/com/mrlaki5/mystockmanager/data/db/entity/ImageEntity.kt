@@ -50,6 +50,12 @@ data class ImageEntity(
     val heightPx: Int,
     val byteSize: Long,
     val importedAt: Long,
+    /**
+     * ISO local date the photo was taken, from EXIF. Null when the file carries no
+     * capture date, in which case the editorial caption simply omits the date rather
+     * than substituting the import date, which is not the same fact.
+     */
+    val capturedOn: String? = null,
     val state: ImageState,
     val title: String? = null,
     val description: String? = null,

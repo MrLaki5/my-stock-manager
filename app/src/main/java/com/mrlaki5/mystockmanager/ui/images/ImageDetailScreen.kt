@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -76,6 +77,7 @@ fun ImageDetailScreen(
 ) {
     val image by viewModel.image.collectAsStateWithLifecycle()
     val draft by viewModel.draft.collectAsStateWithLifecycle()
+    val title by viewModel.title.collectAsStateWithLifecycle()
     val dirty by viewModel.dirty.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -205,6 +207,8 @@ fun ImageDetailScreen(
 
                 editable != null -> MetadataEditor(
                     draft = editable,
+                    title = title,
+                    capturedOn = current.capturedOn,
                     viewModel = viewModel,
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                 )
@@ -237,28 +241,15 @@ private fun Preview(image: ImageEntity) {
 @Composable
 private fun MetadataEditor(
     draft: MetadataDraft,
+    title: String,
+    capturedOn: String?,
     viewModel: ImageDetailViewModel,
     modifier: Modifier = Modifier,
 ) {
     var editingKeyword by remember { mutableStateOf<Int?>(null) }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        OutlinedTextField(
-            value = draft.title,
-            onValueChange = viewModel::setTitle,
-            label = { Text("Title") },
-            isError = draft.title.isBlank(),
-            supportingText = {
-                Text(
-                    if (draft.title.isBlank()) {
-                        "A title is required"
-                    } else {
-                        "${draft.title.length} characters"
-                    }
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-        )
+        CaptionPreview(title = title, hasDate = capturedOn != null)
 
         OutlinedTextField(
             value = draft.description,
@@ -267,7 +258,13 @@ private fun MetadataEditor(
             isError = draft.description.isBlank(),
             minLines = 3,
             supportingText = {
-                if (draft.description.isBlank()) Text("A description is required")
+                Text(
+                    if (draft.description.isBlank()) {
+                        "A description is required — the title is built from it"
+                    } else {
+                        "${draft.description.length} characters"
+                    }
+                )
             },
             modifier = Modifier.fillMaxWidth(),
         )
@@ -309,6 +306,53 @@ private fun MetadataEditor(
                 },
             )
         }
+    }
+}
+
+/**
+ * The title is not editable because it is not stored copy — it is assembled from the event
+ * location, the capture date and the description every time it is written. Showing the
+ * assembled result live is more honest than offering a field whose contents the next save
+ * would silently replace.
+ */
+@Composable
+private fun CaptionPreview(title: String, hasDate: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Title",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "${title.length} characters",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Surface(
+            tonalElevation = 2.dp,
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                title.ifBlank { "—" },
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(12.dp),
+            )
+        }
+        Text(
+            if (hasDate) {
+                "Built from the event location, the date this photo was taken, and the " +
+                    "description below. Edit the description to change it."
+            } else {
+                "Built from the event location and the description below. This photo has " +
+                    "no capture date in its EXIF, so the date is left out rather than guessed."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

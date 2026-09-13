@@ -1,5 +1,8 @@
 package com.mrlaki5.mystockmanager.metadata
 
+import com.mrlaki5.mystockmanager.metadata.model.EditorialTitle
+import com.mrlaki5.mystockmanager.metadata.model.IPTC_HEADLINE_MAX
+import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import org.junit.Assert.assertEquals
@@ -112,6 +115,65 @@ class MetadataRoundTripTest {
         val read = MetadataReader.read(destination)
         assertEquals(20, read.iptcKeywords.size)
         assertEquals(20, read.xmpSubjects.size)
+    }
+
+    @Test
+    fun `a long editorial caption survives whole in Headline and dc-title`() {
+        val source = sourceJpeg()
+        val destination = File(temp.root, "out.jpg")
+        val caption = EditorialTitle.build(
+            location = "Belgrade, Serbia",
+            capturedOn = "2026-05-23",
+            description = "Large Serbian national flags wave above crowds marching toward " +
+                "Slavija Square during a student-led anti-government rally demanding early " +
+                "parliamentary elections.",
+        )
+        val metadata = StockMetadata(
+            title = caption,
+            description = "Large Serbian national flags wave above crowds.",
+            keywords = listOf("belgrade", "protest", "flags"),
+        ).normalized()
+
+        writer.embed(source, destination, metadata)
+        val read = MetadataReader.read(destination)
+
+        // The caption is far past the 64-octet Object Name limit, so the two fields are
+        // *expected* to differ; what must not happen is the caption being lost.
+        assertTrue(caption.length > IPTC_OBJECT_NAME_MAX)
+        assertEquals(caption, read.iptcHeadline)
+        assertEquals(caption, read.xmpTitle)
+        assertEquals(metadata.objectName, read.iptcTitle)
+        assertTrue(read.iptcTitle!!.length <= IPTC_OBJECT_NAME_MAX)
+        assertTrue("verification reported: ${read.matches(metadata)}", read.matches(metadata).isEmpty())
+    }
+
+    @Test
+    fun `a caption past the Headline limit is kept whole in dc-title`() {
+        val source = sourceJpeg()
+        val destination = File(temp.root, "out.jpg")
+        // Two sentences plus a location and a date: past 256 octets, which a real caption
+        // reaches more easily than the IIM limit suggests.
+        val caption = EditorialTitle.build(
+            location = "Belgrade, Serbia",
+            capturedOn = "2026-05-23",
+            description = "Large Serbian national flags wave above crowds marching toward " +
+                "Slavija Square during a student-led anti-government rally demanding early " +
+                "parliamentary elections. Organisers put the turnout in the tens of " +
+                "thousands as the march reached the city centre at dusk.",
+        )
+        val metadata = StockMetadata(caption, "A crowd marches.", listOf("belgrade")).normalized()
+
+        writer.embed(source, destination, metadata)
+        val read = MetadataReader.read(destination)
+
+        assertTrue("fixture no longer exceeds the limit", caption.length > IPTC_HEADLINE_MAX)
+        // Nothing is lost: the field without a cap carries the caption entire.
+        assertEquals(caption, read.xmpTitle)
+        // And the capped fields stay legal rather than overflowing.
+        assertTrue(read.iptcHeadline!!.length <= IPTC_HEADLINE_MAX)
+        assertTrue(read.iptcTitle!!.length <= IPTC_OBJECT_NAME_MAX)
+        assertTrue(caption.startsWith(read.iptcHeadline!!))
+        assertTrue("verification reported: ${read.matches(metadata)}", read.matches(metadata).isEmpty())
     }
 
     private fun sampleMetadata(keywordCount: Int) = StockMetadata(

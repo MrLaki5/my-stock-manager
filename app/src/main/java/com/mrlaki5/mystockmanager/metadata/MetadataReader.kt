@@ -30,6 +30,7 @@ object MetadataReader {
             .filter { it.iptcType == IptcTypes.KEYWORDS }
             .map { it.value }
         val iptcTitle = records.firstOrNull { it.iptcType == IptcTypes.OBJECT_NAME }?.value
+        val iptcHeadline = records.firstOrNull { it.iptcType == IptcTypes.HEADLINE }?.value
         val iptcDescription =
             records.firstOrNull { it.iptcType == IptcTypes.CAPTION_ABSTRACT }?.value
 
@@ -53,6 +54,7 @@ object MetadataReader {
         return VerificationResult(
             iptcKeywords = iptcKeywords,
             iptcTitle = iptcTitle,
+            iptcHeadline = iptcHeadline,
             iptcDescription = iptcDescription,
             xmpSubjects = xmpSubjects,
             xmpTitle = xmpTitle,

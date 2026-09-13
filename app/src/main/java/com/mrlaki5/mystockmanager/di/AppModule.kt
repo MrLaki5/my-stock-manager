@@ -26,7 +26,11 @@ object AppModule {
     @Singleton
     fun database(@ApplicationContext context: Context): StockDatabase =
         Room.databaseBuilder(context, StockDatabase::class.java, StockDatabase.NAME)
-            .addMigrations(StockDatabase.MIGRATION_1_2, StockDatabase.MIGRATION_2_3)
+            .addMigrations(
+                StockDatabase.MIGRATION_1_2,
+                StockDatabase.MIGRATION_2_3,
+                StockDatabase.MIGRATION_3_4,
+            )
             .build()
 
     @Provides

@@ -9,7 +9,9 @@ import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
+import com.mrlaki5.mystockmanager.metadata.model.EditorialTitle
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
+import com.mrlaki5.mystockmanager.storage.CaptureDate
 import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.ImportCopier
 import com.mrlaki5.mystockmanager.storage.ImportSummary
@@ -47,11 +49,22 @@ class StockRepository @Inject constructor(
     fun observeImage(id: Long): Flow<ImageEntity?> = imageDao.observeById(id)
 
     /**
+     * The event location an image inherits, for a screen that wants to render the caption
+     * as the user types rather than only after saving.
+     */
+    suspend fun locationFor(image: ImageEntity): String? =
+        image.folderId?.let { folderDao.observeById(it).first()?.location }
+
+    /**
      * Saves hand-edited metadata, writing it into the album file before the row.
      *
      * That order matters: the file is what gets uploaded, so a row claiming a keyword the
      * JPEG does not carry would be a lie the user cannot see. If the embed fails, nothing
      * is saved and the caller is told why.
+     *
+     * The title on [metadata] is ignored and rebuilt. The caption format is an invariant of
+     * the file rather than a suggestion to callers, so it is derived at the one point that
+     * writes it and cannot be bypassed by a screen that forgot.
      */
     suspend fun updateMetadata(imageId: Long, metadata: StockMetadata): Result<StockMetadata> {
         val image = imageDao.getById(imageId)
@@ -59,7 +72,15 @@ class StockRepository @Inject constructor(
         val uri = image.mediaStoreUri?.toUri()
             ?: return Result.failure(IllegalStateException("This image is not in the album"))
 
-        return embedder.embed(uri, metadata).onSuccess { written ->
+        val captioned = metadata.copy(
+            title = EditorialTitle.build(
+                location = image.folderId?.let { folderDao.observeById(it).first()?.location },
+                capturedOn = image.capturedOn,
+                description = metadata.description,
+            ),
+        )
+
+        return embedder.embed(uri, captioned).onSuccess { written ->
             imageDao.updateMetadata(
                 id = imageId,
                 title = written.title,
@@ -159,6 +180,24 @@ class StockRepository @Inject constructor(
     fun albumNameFor(eventName: String): String = MediaStoreExporter.albumNameFor(eventName)
 
     fun albumPathFor(eventName: String): String = MediaStoreExporter.relativePathFor(eventName)
+
+    /**
+     * Fills in the EXIF capture date for images imported before the editorial caption
+     * needed one. Reads each album file's header rather than copying it out, so this is
+     * cheap enough to run at startup; rows whose files carry no date are left null and
+     * are not retried on every launch beyond a header read.
+     */
+    suspend fun backfillCaptureDates() = withContext(Dispatchers.IO) {
+        for (image in imageDao.getWithoutCaptureDate()) {
+            val uri = image.mediaStoreUri?.toUri() ?: continue
+            val captured = runCatching {
+                mediaStore.openInput(uri)?.use { CaptureDate.readFrom(it) }
+            }.getOrNull()
+                ?: mediaStore.dateTakenMillis(uri)?.let(CaptureDate::fromEpochMillis)
+                ?: continue
+            imageDao.setCapturedOn(image.id, captured)
+        }
+    }
 
     /**
      * A process death mid-generation leaves rows stuck in GENERATING with no worker

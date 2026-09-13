@@ -12,7 +12,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 
 @Database(
     entities = [FolderEntity::class, ImageEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -39,6 +39,17 @@ abstract class StockDatabase : RoomDatabase() {
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE folders ADD COLUMN location TEXT")
+            }
+        }
+
+        /**
+         * Adds the EXIF capture date, which the editorial caption is built from. Rows
+         * imported before this are backfilled from their album files at startup rather
+         * than here: SQL cannot read a JPEG header.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE images ADD COLUMN capturedOn TEXT")
             }
         }
     }

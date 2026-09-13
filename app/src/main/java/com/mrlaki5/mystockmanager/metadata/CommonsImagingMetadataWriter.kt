@@ -47,8 +47,11 @@ class CommonsImagingMetadataWriter : MetadataWriter {
     private fun buildApp13Data(metadata: StockMetadata): PhotoshopApp13Data {
         val records = ArrayList<IptcRecord>(metadata.keywords.size + 3)
 
-        records += IptcRecord(IptcTypes.OBJECT_NAME, metadata.title)
-        records += IptcRecord(IptcTypes.HEADLINE, metadata.title)
+        // IIM caps Object Name at 64 octets and Headline at 256, both of which an
+        // editorial caption can exceed, so each record carries the form trimmed to its own
+        // limit. The untruncated caption goes out in XMP dc:title.
+        records += IptcRecord(IptcTypes.OBJECT_NAME, metadata.objectName)
+        records += IptcRecord(IptcTypes.HEADLINE, metadata.headline)
         records += IptcRecord(IptcTypes.CAPTION_ABSTRACT, metadata.description)
         // KEYWORDS is a repeatable IIM field: one record per keyword, in relevance order.
         for (keyword in metadata.keywords) {

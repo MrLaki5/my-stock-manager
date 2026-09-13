@@ -74,6 +74,13 @@ class ImportCopier @Inject constructor(
                 // pointing at nothing.
                 val published = mediaStore.publish(temp, displayName, eventName)
 
+                // EXIF first, since it is the camera's own record. Plenty of libraries
+                // have been through an editor that dropped it, so fall back to what
+                // MediaStore worked out; anything still unknown is left for the startup
+                // backfill to retry once the scan has caught up.
+                val capturedOn = CaptureDate.readFrom(temp)
+                    ?: mediaStore.dateTakenMillis(published)?.let(CaptureDate::fromEpochMillis)
+
                 imageDao.insert(
                     ImageEntity(
                         folderId = folderId,
@@ -83,6 +90,7 @@ class ImportCopier @Inject constructor(
                         heightPx = bounds.outHeight,
                         byteSize = temp.length(),
                         importedAt = System.currentTimeMillis(),
+                        capturedOn = capturedOn,
                         state = ImageState.FILED,
                         mediaStoreUri = published.toString(),
                     )

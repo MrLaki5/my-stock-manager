@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
+import com.mrlaki5.mystockmanager.metadata.model.EditorialTitle
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,36 +20,36 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** The editable copy of an image's metadata, held apart from the row it came from. */
+/**
+ * The editable copy of an image's metadata.
+ *
+ * There is no title here. The title is the editorial caption, derived from the event
+ * location, the capture date and the description, so it is computed rather than edited —
+ * see [ImageDetailViewModel.title].
+ */
 data class MetadataDraft(
-    val title: String,
     val description: String,
     val keywords: List<String>,
     val category: String,
 ) {
-    fun toMetadata() = StockMetadata(
-        title = title,
-        description = description,
-        keywords = keywords,
-        category = category.trim().takeIf { it.isNotEmpty() },
-    )
-
     /**
-     * Embedding an empty title or description writes an IPTC record that reads back as
-     * absent rather than empty, which then fails verification. Requiring both up front
-     * turns that into a disabled button instead of a confusing save failure.
+     * Embedding an empty description writes IPTC records that read back as absent rather
+     * than empty, which then fails verification. It is also what the caption is built from,
+     * so an empty one would leave the title as a bare "Belgrade, Serbia - May 23, 2026:".
      */
-    val canSave: Boolean get() = title.isNotBlank() && description.isNotBlank()
+    val canSave: Boolean get() = description.isNotBlank()
 
     companion object {
         fun of(image: ImageEntity) = MetadataDraft(
-            title = image.title.orEmpty(),
             description = image.description.orEmpty(),
             keywords = image.keywords,
             category = image.category.orEmpty(),
         )
     }
 }
+
+/** The two facts the caption is prefixed with, neither of which is edited on this screen. */
+private data class CaptionLead(val location: String?, val capturedOn: String?)
 
 @HiltViewModel
 class ImageDetailViewModel @Inject constructor(
@@ -67,6 +68,21 @@ class ImageDetailViewModel @Inject constructor(
     /** What is currently on disk, so [dirty] knows what an edit is being compared against. */
     private val _saved = MutableStateFlow<MetadataDraft?>(null)
 
+    private val _lead = MutableStateFlow<CaptionLead?>(null)
+
+    /**
+     * The caption exactly as saving would write it. Recomputed as the description is typed
+     * rather than fetched, so the screen can show the real title live; the repository
+     * derives it again from the same inputs when it writes, so the two cannot disagree.
+     */
+    val title: StateFlow<String> = combine(_draft, _lead) { draft, lead ->
+        if (draft == null) "" else EditorialTitle.build(
+            location = lead?.location,
+            capturedOn = lead?.capturedOn,
+            description = draft.description,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
     val dirty: StateFlow<Boolean> = combine(_draft, _saved) { draft, saved ->
         draft != null && draft != saved
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -81,16 +97,17 @@ class ImageDetailViewModel @Inject constructor(
         // Seeded once, from the first row that arrives. Later emissions are not folded in:
         // one of them is this screen's own save, and re-seeding from any of them would
         // throw away edits the user is still in the middle of making.
-        viewModelScope.launch { seed(repository.observeImage(imageId).filterNotNull().first()) }
+        viewModelScope.launch {
+            val image = repository.observeImage(imageId).filterNotNull().first()
+            _lead.value = CaptionLead(repository.locationFor(image), image.capturedOn)
+            seed(MetadataDraft.of(image))
+        }
     }
 
-    private fun seed(image: ImageEntity) {
-        val draft = MetadataDraft.of(image)
+    private fun seed(draft: MetadataDraft) {
         _draft.value = draft
         _saved.value = draft
     }
-
-    fun setTitle(value: String) = edit { it.copy(title = value) }
 
     fun setDescription(value: String) = edit { it.copy(description = value) }
 
@@ -149,18 +166,25 @@ class ImageDetailViewModel @Inject constructor(
         if (!draft.canSave || _busy.value) return
         viewModelScope.launch {
             _busy.value = true
-            repository.updateMetadata(imageId, draft.toMetadata())
+            val request = StockMetadata(
+                // Rebuilt by the repository from the same inputs; passed for coherence
+                // rather than authority.
+                title = title.value,
+                description = draft.description,
+                keywords = draft.keywords,
+                category = draft.category.trim().takeIf { it.isNotEmpty() },
+            )
+            repository.updateMetadata(imageId, request)
                 .onSuccess { written ->
                     // Seed from what was written, not from the draft: the agency field
                     // limits may have clamped it, and the screen should show the truth.
-                    val saved = MetadataDraft(
-                        title = written.title,
-                        description = written.description,
-                        keywords = written.keywords,
-                        category = written.category.orEmpty(),
+                    seed(
+                        MetadataDraft(
+                            description = written.description,
+                            keywords = written.keywords,
+                            category = written.category.orEmpty(),
+                        )
                     )
-                    _draft.value = saved
-                    _saved.value = saved
                     _message.value = "Saved and written into the image"
                 }
                 .onFailure { _message.value = it.message ?: "Could not save" }

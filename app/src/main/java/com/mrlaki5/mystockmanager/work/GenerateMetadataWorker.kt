@@ -9,6 +9,7 @@ import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
 import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
+import com.mrlaki5.mystockmanager.metadata.model.EditorialTitle
 import com.mrlaki5.mystockmanager.openai.OpenAiClient
 import com.mrlaki5.mystockmanager.openai.OpenAiResult
 import com.mrlaki5.mystockmanager.storage.AppFileStore
@@ -76,10 +77,21 @@ class GenerateMetadataWorker @AssistedInject constructor(
                 is OpenAiResult.Terminal -> fail(imageId, result.message)
 
                 is OpenAiResult.Success -> {
+                    // The model writes the caption body; the app owns its shape. Building
+                    // the title here rather than asking for it is what makes the format
+                    // guaranteed instead of merely requested.
+                    val captioned = result.metadata.copy(
+                        title = EditorialTitle.build(
+                            location = location,
+                            capturedOn = image.capturedOn,
+                            description = result.metadata.description,
+                        ),
+                    )
+
                     // The embedder verifies the round trip before overwriting, and hands
                     // back what it actually wrote: the clamped values, so the row and the
                     // file cannot disagree about field limits.
-                    val written = embedder.embedFrom(source, mediaUri, result.metadata)
+                    val written = embedder.embedFrom(source, mediaUri, captioned)
                         .getOrElse { return fail(imageId, it.message ?: "Embedding failed") }
 
                     val now = System.currentTimeMillis()
