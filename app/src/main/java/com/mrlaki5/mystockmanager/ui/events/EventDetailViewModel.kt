@@ -101,6 +101,28 @@ class EventDetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Removes the selected images and their album copies. Generation is cancelled first:
+     * a worker that started in between would only rewrite a file that is about to go.
+     */
+    fun deleteSelected() {
+        val ids = _selection.value.toList()
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            _busy.value = true
+            workScheduler.cancelGeneration(ids)
+            val summary = repository.deleteImages(ids)
+            _selection.value = emptySet()
+            _busy.value = false
+            _message.value = buildString {
+                append("Deleted ${summary.deleted} image${if (summary.deleted == 1) "" else "s"}")
+                if (summary.albumFilesLeft > 0) {
+                    append(" · ${summary.albumFilesLeft} could not be removed from the album")
+                }
+            }
+        }
+    }
+
     fun consumeMessage() {
         _message.value = null
     }

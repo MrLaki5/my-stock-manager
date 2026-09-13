@@ -12,10 +12,18 @@ import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.ImportCopier
 import com.mrlaki5.mystockmanager.storage.ImportSummary
 import com.mrlaki5.mystockmanager.storage.MediaStoreExporter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * The outcome of a delete. [albumFilesLeft] is the files MediaStore refused to remove;
+ * their rows are gone either way, so the count exists to be shown, not retried.
+ */
+data class DeleteSummary(val deleted: Int, val albumFilesLeft: Int)
 
 @Singleton
 class StockRepository @Inject constructor(
@@ -72,15 +80,41 @@ class StockRepository @Inject constructor(
      */
     suspend fun deleteEvent(id: Long) {
         imageDao.observeByFolder(id).first().forEach { image ->
-            image.mediaStoreUri?.let { runCatching { mediaStore.delete(it.toUri()) } }
+            removeAlbumCopy(image)
             imageDao.delete(image.id)
         }
         folderDao.delete(id)
     }
 
-    suspend fun deleteImage(image: ImageEntity) {
-        image.mediaStoreUri?.let { runCatching { mediaStore.delete(it.toUri()) } }
-        imageDao.delete(image.id)
+    /**
+     * Deletes the given images and the album copies they own. Safe for the same reason
+     * [deleteEvent] is: StockReady holds the app's own copies, and the camera-roll
+     * originals were never touched.
+     *
+     * Ids that no longer exist are skipped rather than counted, so a stale selection
+     * cannot inflate the number reported back to the user.
+     */
+    suspend fun deleteImages(ids: Collection<Long>): DeleteSummary = withContext(Dispatchers.IO) {
+        var deleted = 0
+        var albumFilesLeft = 0
+        for (id in ids) {
+            val image = imageDao.getById(id) ?: continue
+            if (!removeAlbumCopy(image)) albumFilesLeft++
+            imageDao.delete(id)
+            deleted++
+        }
+        DeleteSummary(deleted, albumFilesLeft)
+    }
+
+    /**
+     * True when nothing of this image is left in the album. A zero-row delete counts as
+     * success: it means the file was already gone, which is the outcome we wanted. Only
+     * a refusal — ownership of the MediaStore row lost after a reinstall — leaves a file
+     * behind, and the caller reports that rather than dropping it silently.
+     */
+    private fun removeAlbumCopy(image: ImageEntity): Boolean {
+        val uri = image.mediaStoreUri?.toUri() ?: return true
+        return runCatching { mediaStore.delete(uri) }.isSuccess
     }
 
     suspend fun importInto(folderId: Long, uris: List<Uri>): ImportSummary {

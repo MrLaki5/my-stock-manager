@@ -38,6 +38,18 @@ class WorkScheduler @Inject constructor(
         }
     }
 
+    /**
+     * Drops queued generation for images that are going away. The worker already bails
+     * out on a missing row, but cancelling stops WorkManager from waking up and retrying
+     * a job that has nothing left to act on.
+     */
+    fun cancelGeneration(imageIds: Collection<Long>) {
+        val workManager = WorkManager.getInstance(context)
+        for (imageId in imageIds) {
+            workManager.cancelUniqueWork(uniqueNameFor(imageId))
+        }
+    }
+
     private fun uniqueNameFor(imageId: Long) = "generate-$imageId"
 
     companion object {

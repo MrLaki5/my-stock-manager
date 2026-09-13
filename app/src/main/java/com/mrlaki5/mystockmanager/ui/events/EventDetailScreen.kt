@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -83,6 +84,7 @@ fun EventDetailScreen(
     }
 
     var askingLocation by remember { mutableStateOf(false) }
+    var confirmingDelete by remember { mutableStateOf(false) }
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(MAX_PICK)
@@ -96,6 +98,17 @@ fun EventDetailScreen(
             onConfirm = {
                 viewModel.generateSelected(it)
                 askingLocation = false
+            },
+        )
+    }
+
+    if (confirmingDelete) {
+        DeleteDialog(
+            count = selection.size,
+            onDismiss = { confirmingDelete = false },
+            onConfirm = {
+                viewModel.deleteSelected()
+                confirmingDelete = false
             },
         )
     }
@@ -135,8 +148,9 @@ fun EventDetailScreen(
         },
         bottomBar = {
             if (selection.isNotEmpty()) {
-                GenerateBar(
+                SelectionBar(
                     count = selection.size,
+                    onDelete = { confirmingDelete = true },
                     onGenerate = { askingLocation = true },
                 )
             }
@@ -304,7 +318,7 @@ private fun ImageCell(
 }
 
 @Composable
-private fun GenerateBar(count: Int, onGenerate: () -> Unit) {
+private fun SelectionBar(count: Int, onDelete: () -> Unit, onGenerate: () -> Unit) {
     Surface(tonalElevation = 3.dp) {
         Row(
             // The app draws edge-to-edge, so the bar must clear the system
@@ -312,13 +326,42 @@ private fun GenerateBar(count: Int, onGenerate: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text("$count selected", modifier = Modifier.weight(1f))
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete selected",
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            }
             Button(onClick = onGenerate) { Text("Generate metadata") }
         }
     }
+}
+
+@Composable
+private fun DeleteDialog(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete $count image${if (count == 1) "" else "s"}?") },
+        text = {
+            Text(
+                "This removes them from the StockReady album, along with any metadata " +
+                    "already generated for them. The originals in your camera roll are " +
+                    "not touched."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
