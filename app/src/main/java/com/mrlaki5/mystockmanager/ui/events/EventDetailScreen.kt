@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -123,7 +124,7 @@ fun EventDetailScreen(
                     }
                 },
                 actions = {
-                    if (images.isNotEmpty()) {
+                    if (!images.isNullOrEmpty()) {
                         TextButton(onClick = {
                             if (selection.isEmpty()) viewModel.selectAll() else viewModel.clearSelection()
                         }) {
@@ -162,28 +163,35 @@ fun EventDetailScreen(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            if (images.isEmpty()) {
-                EmptyEvent(Modifier.fillMaxSize())
-            } else {
-                StatusSummary(
-                    images = images,
-                    albumName = event?.name?.let(viewModel::albumNameFor) ?: "",
-                    location = event?.location,
-                    onSelectUngenerated = viewModel::selectUngenerated,
-                )
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 110.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(images, key = { it.id }) { image ->
-                        ImageCell(
-                            image = image,
-                            selected = image.id in selection,
-                            onClick = { viewModel.toggleSelection(image.id) },
-                        )
+            val loaded = images
+            when {
+                // Still reading. Showing the empty state here would claim the event has
+                // no images before we know that, which is what it used to do.
+                loaded == null -> LoadingImages(Modifier.fillMaxSize())
+
+                loaded.isEmpty() -> EmptyEvent(Modifier.fillMaxSize())
+
+                else -> {
+                    StatusSummary(
+                        images = loaded,
+                        albumName = event?.name?.let(viewModel::albumNameFor) ?: "",
+                        location = event?.location,
+                        onSelectUngenerated = viewModel::selectUngenerated,
+                    )
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 110.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        items(loaded, key = { it.id }) { image ->
+                            ImageCell(
+                                image = image,
+                                selected = image.id in selection,
+                                onClick = { viewModel.toggleSelection(image.id) },
+                            )
+                        }
                     }
                 }
             }
@@ -362,6 +370,13 @@ private fun DeleteDialog(count: Int, onDismiss: () -> Unit, onConfirm: () -> Uni
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun LoadingImages(modifier: Modifier = Modifier) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
 }
 
 @Composable

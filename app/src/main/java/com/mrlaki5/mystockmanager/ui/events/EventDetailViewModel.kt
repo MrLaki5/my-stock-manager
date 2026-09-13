@@ -29,11 +29,22 @@ class EventDetailViewModel @Inject constructor(
 
     private val eventId: Long = checkNotNull(savedStateHandle.get<Long>("eventId"))
 
+    // Eagerly rather than WhileSubscribed: the latter only starts the query once the
+    // composable subscribes, measured at ~150ms after this ViewModel was built. Starting
+    // at construction overlaps the read with composition rather than queueing it behind,
+    // which is worth roughly that much on entry. It does not make the read free — the
+    // screen still shows a spinner until the first emission.
     val event: StateFlow<FolderEntity?> = repository.observeEvent(eventId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    val images: StateFlow<List<ImageEntity>> = repository.observeImages(eventId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /**
+     * Null means "not read yet", which is deliberately distinct from an empty list: only
+     * the latter is a genuinely empty event, and only it should show the empty state.
+     */
+    val images: StateFlow<List<ImageEntity>?> = repository.observeImages(eventId)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val loadedImages: List<ImageEntity> get() = images.value.orEmpty()
 
     private val _selection = MutableStateFlow<Set<Long>>(emptySet())
     val selection: StateFlow<Set<Long>> = _selection.asStateFlow()
@@ -53,12 +64,12 @@ class EventDetailViewModel @Inject constructor(
     }
 
     fun selectAll() {
-        _selection.value = images.value.map { it.id }.toSet()
+        _selection.value = loadedImages.map { it.id }.toSet()
     }
 
     /** Selects only what Generate would actually act on — the ungenerated and the failed. */
     fun selectUngenerated() {
-        _selection.value = images.value
+        _selection.value = loadedImages
             .filter { it.state == ImageState.FILED || it.state == ImageState.GENERATION_FAILED }
             .map { it.id }
             .toSet()
