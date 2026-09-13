@@ -15,9 +15,9 @@ Shutterstock already carries its metadata.
   `Pictures/StockReady/StockReady - <event>/`, visible in your gallery and in every upload
   picker immediately. Your camera roll is never touched, and there is no second private copy
   to drift out of sync.
-- **Generates metadata with OpenAI vision** - title, editorial caption, up to 49
-  relevance-ordered keywords, and a category. You can add a location, which the model cannot
-  infer from the pixels and which buyers search by.
+- **Generates metadata with OpenAI vision** - title, description, up to 49 relevance-ordered
+  keywords, and a category. You can add a location, which the model cannot infer from the
+  pixels and which buyers search by.
 - **Embeds it losslessly** into IPTC IIM (APP13) and XMP (APP1). Segments are spliced;
   pixels are never decoded or re-encoded.
 - **Verifies every write.** The embedded copy is read back and compared before the album
@@ -29,25 +29,6 @@ Shutterstock already carries its metadata.
   own without holding up the batch.
 - **Keeps your API key in EncryptedSharedPreferences**, Keystore-backed and excluded from
   backup.
-
-## Caption format
-
-The description is always written as the editorial caption both agencies expect:
-
-```
-Belgrade, Serbia - May 23, 2026: Large Serbian national flags wave above crowds
-marching toward Slavija Square during a student-led anti-government rally.
-```
-
-The model writes only the body; the app prepends the lead, so the shape is guaranteed
-instead of merely requested. The location comes from the event and the date from the
-photo's EXIF. Either part drops out when unknown - a photo with no capture date gets no
-date rather than a guessed one, because that would be a factual claim about when something
-happened.
-
-The editor holds the body, and shows the assembled caption beneath it so you can see what
-an agency will actually receive. Titles are separate and stay short: IPTC caps them at 64
-characters.
 
 ## Keyword limits
 
