@@ -5,7 +5,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,6 +69,7 @@ import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
 @Composable
 fun EventDetailScreen(
     onBack: () -> Unit,
+    onOpenImage: (Long) -> Unit,
     viewModel: EventDetailViewModel = hiltViewModel(),
 ) {
     val event by viewModel.event.collectAsStateWithLifecycle()
@@ -189,7 +191,13 @@ fun EventDetailScreen(
                             ImageCell(
                                 image = image,
                                 selected = image.id in selection,
-                                onClick = { viewModel.toggleSelection(image.id) },
+                                // Tap opens the image; it only toggles once a selection
+                                // is already running, so the multi-select flow survives.
+                                onClick = {
+                                    if (selection.isEmpty()) onOpenImage(image.id)
+                                    else viewModel.toggleSelection(image.id)
+                                },
+                                onLongClick = { viewModel.toggleSelection(image.id) },
                             )
                         }
                     }
@@ -272,11 +280,13 @@ private fun StatusSummary(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ImageCell(
     image: ImageEntity,
     selected: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -290,7 +300,7 @@ private fun ImageCell(
                     Modifier
                 }
             )
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         AsyncImage(
             model = image.mediaStoreUri?.toUri(),

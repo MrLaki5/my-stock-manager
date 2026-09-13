@@ -16,6 +16,9 @@ interface ImageDao {
     @Query("SELECT * FROM images WHERE id = :id")
     suspend fun getById(id: Long): ImageEntity?
 
+    @Query("SELECT * FROM images WHERE id = :id")
+    fun observeById(id: Long): Flow<ImageEntity?>
+
     @Insert
     suspend fun insert(image: ImageEntity): Long
 
@@ -50,6 +53,27 @@ interface ImageDao {
 
     @Query("DELETE FROM images WHERE id = :id")
     suspend fun delete(id: Long)
+
+    /**
+     * A hand edit. Unlike [saveGenerated] this leaves state, model and generatedAt alone:
+     * the metadata came from the model originally and editing a keyword does not change
+     * which model produced it or when.
+     */
+    @Query(
+        """
+        UPDATE images
+        SET title = :title, description = :description, keywords = :keywords,
+            category = :category
+        WHERE id = :id
+        """
+    )
+    suspend fun updateMetadata(
+        id: Long,
+        title: String,
+        description: String,
+        keywords: List<String>,
+        category: String?,
+    )
 
     @Query("UPDATE images SET state = :to WHERE state = :from")
     suspend fun resetState(from: ImageState, to: ImageState)

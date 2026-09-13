@@ -8,8 +8,7 @@ import androidx.work.WorkerParameters
 import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
-import com.mrlaki5.mystockmanager.metadata.MetadataReader
-import com.mrlaki5.mystockmanager.metadata.MetadataWriter
+import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
 import com.mrlaki5.mystockmanager.openai.OpenAiClient
 import com.mrlaki5.mystockmanager.openai.OpenAiResult
 import com.mrlaki5.mystockmanager.storage.AppFileStore
@@ -38,7 +37,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
     private val mediaStore: MediaStoreExporter,
     private val keyStore: SecureKeyStore,
     private val openAiClient: OpenAiClient,
-    private val metadataWriter: MetadataWriter,
+    private val embedder: MetadataEmbedder,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
@@ -60,7 +59,6 @@ class GenerateMetadataWorker @AssistedInject constructor(
         val model = keyStore.model
 
         val source = fileStore.newTempFile("gen-src")
-        val embedded = fileStore.newTempFile("gen-out")
         try {
             runCatching { mediaStore.copyTo(mediaUri, source) }
                 .getOrElse { return fail(imageId, "Could not read image: ${it.message}") }
@@ -78,27 +76,19 @@ class GenerateMetadataWorker @AssistedInject constructor(
                 is OpenAiResult.Terminal -> fail(imageId, result.message)
 
                 is OpenAiResult.Success -> {
-                    val metadata = result.metadata
-                    val problems = runCatching {
-                        metadataWriter.embed(source, embedded, metadata)
-                        MetadataReader.read(embedded).matches(metadata.normalized())
-                    }.getOrElse { return fail(imageId, "Embedding failed: ${it.message}") }
-
-                    if (problems.isNotEmpty()) {
-                        return fail(imageId, "Verification failed: ${problems.first()}")
-                    }
-
-                    // Only now touch the file the user can see.
-                    runCatching { mediaStore.overwrite(mediaUri, embedded) }
-                        .getOrElse { return fail(imageId, "Could not update album file: ${it.message}") }
+                    // The embedder verifies the round trip before overwriting, and hands
+                    // back what it actually wrote: the clamped values, so the row and the
+                    // file cannot disagree about field limits.
+                    val written = embedder.embedFrom(source, mediaUri, result.metadata)
+                        .getOrElse { return fail(imageId, it.message ?: "Embedding failed") }
 
                     val now = System.currentTimeMillis()
                     imageDao.saveGenerated(
                         id = imageId,
-                        title = metadata.title,
-                        description = metadata.description,
-                        keywords = metadata.keywords,
-                        category = metadata.category,
+                        title = written.title,
+                        description = written.description,
+                        keywords = written.keywords,
+                        category = written.category,
                         state = ImageState.GENERATED,
                         generatedAt = now,
                         model = model,
@@ -109,7 +99,6 @@ class GenerateMetadataWorker @AssistedInject constructor(
             }
         } finally {
             source.delete()
-            embedded.delete()
         }
     }
 

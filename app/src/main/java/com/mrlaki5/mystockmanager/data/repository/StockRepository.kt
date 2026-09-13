@@ -8,6 +8,8 @@ import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
 import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
+import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
+import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.ImportCopier
 import com.mrlaki5.mystockmanager.storage.ImportSummary
@@ -32,6 +34,7 @@ class StockRepository @Inject constructor(
     private val importCopier: ImportCopier,
     private val fileStore: AppFileStore,
     private val mediaStore: MediaStoreExporter,
+    private val embedder: MetadataEmbedder,
 ) {
 
     fun observeEvents(): Flow<List<FolderSummary>> = folderDao.observeSummaries()
@@ -40,6 +43,32 @@ class StockRepository @Inject constructor(
 
     fun observeImages(folderId: Long): Flow<List<ImageEntity>> =
         imageDao.observeByFolder(folderId)
+
+    fun observeImage(id: Long): Flow<ImageEntity?> = imageDao.observeById(id)
+
+    /**
+     * Saves hand-edited metadata, writing it into the album file before the row.
+     *
+     * That order matters: the file is what gets uploaded, so a row claiming a keyword the
+     * JPEG does not carry would be a lie the user cannot see. If the embed fails, nothing
+     * is saved and the caller is told why.
+     */
+    suspend fun updateMetadata(imageId: Long, metadata: StockMetadata): Result<StockMetadata> {
+        val image = imageDao.getById(imageId)
+            ?: return Result.failure(IllegalStateException("This image no longer exists"))
+        val uri = image.mediaStoreUri?.toUri()
+            ?: return Result.failure(IllegalStateException("This image is not in the album"))
+
+        return embedder.embed(uri, metadata).onSuccess { written ->
+            imageDao.updateMetadata(
+                id = imageId,
+                title = written.title,
+                description = written.description,
+                keywords = written.keywords,
+                category = written.category,
+            )
+        }
+    }
 
     /** Names are unique; returns a message instead of throwing on a collision. */
     suspend fun createEvent(name: String): Result<Long> {
