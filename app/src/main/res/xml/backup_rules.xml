@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!--
+      The OpenAI key is encrypted with a Keystore master key that does not leave the
+      device, so a restored copy would be undecryptable anyway. Excluding it keeps a
+      useless, confusing blob out of backups.
+    -->
+    <exclude domain="sharedpref" path="stock_secure_prefs.xml" />
+</full-backup-content>
