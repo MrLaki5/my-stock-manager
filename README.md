@@ -30,6 +30,22 @@ Shutterstock already carries its metadata.
 - **Keeps your API key in EncryptedSharedPreferences**, Keystore-backed and excluded from
   backup.
 
+## Uploading stays manual
+
+MyStockManager never connects to Adobe Stock or Shutterstock. It has no agency login, stores no
+agency credentials, and does not submit, schedule or automate uploads. Its only network call is
+to the OpenAI API, for metadata.
+
+All it prepares is files. Each event is its own folder under `Pictures/StockReady/`, so when you
+open an agency's upload form and add files, the system picker already shows that shoot grouped
+together. You pick the images and submit them yourself. The title, description and keywords are
+already embedded in each file, so it works like uploading photos you keyworded in Lightroom or
+Bridge.
+
+The photos are never generated or altered. A model only drafts the text, and you can edit every
+field before it is written. It is still up to you to check that the text describes each image
+accurately.
+
 ## Keyword limits
 
 Adobe Stock caps keywords at 49, Shutterstock at 50 with a minimum of 7. The app clamps to
