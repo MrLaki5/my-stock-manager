@@ -36,7 +36,7 @@ interface ImageDao {
         UPDATE images
         SET title = :title, description = :description, keywords = :keywords,
             category = :category, state = :state, generatedAt = :generatedAt,
-            model = :model, generationError = NULL
+            model = :model, generationError = NULL, fileVersion = fileVersion + 1
         WHERE id = :id
         """
     )
@@ -51,9 +51,6 @@ interface ImageDao {
         model: String?,
     )
 
-    @Query("DELETE FROM images WHERE id = :id")
-    suspend fun delete(id: Long)
-
     /**
      * A hand edit. Unlike [saveGenerated] this leaves state, model and generatedAt alone:
      * the metadata came from the model originally and editing a keyword does not change
@@ -63,7 +60,7 @@ interface ImageDao {
         """
         UPDATE images
         SET title = :title, description = :description, keywords = :keywords,
-            category = :category
+            category = :category, fileVersion = fileVersion + 1
         WHERE id = :id
         """
     )

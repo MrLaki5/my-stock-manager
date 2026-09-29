@@ -93,6 +93,11 @@ class MediaStoreExporter(private val context: Context) {
         }
     }.getOrNull()
 
+    /** Current byte length, or null if the entry is gone; the row's byteSize is stale after an embed. */
+    fun sizeOf(uri: Uri): Long? = runCatching {
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
+    }.getOrNull()?.takeIf { it >= 0 }
+
     fun delete(uri: Uri): Int = context.contentResolver.delete(uri, null, null)
 
     fun exists(uri: Uri): Boolean =
@@ -142,7 +147,7 @@ class MediaStoreExporter(private val context: Context) {
         fun albumNameFor(eventName: String): String = "StockReady - ${sanitize(eventName)}"
 
         /** MediaStore rejects path segments containing separators or control characters. */
-        private fun sanitize(eventName: String): String =
+        internal fun sanitize(eventName: String): String =
             eventName.trim()
                 .replace(Regex("""[/\\:*?"<>|\x00-\x1F]"""), "-")
                 .take(64)

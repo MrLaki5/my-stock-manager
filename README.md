@@ -27,14 +27,22 @@ Shutterstock already carries its metadata.
   the database.
 - **Runs generation in the background**, one worker per image, so one failure retries on its
   own without holding up the batch.
-- **Keeps your API key in EncryptedSharedPreferences**, Keystore-backed and excluded from
-  backup.
+- **Optionally syncs every event to NextCloud** - one folder per event under a path you
+  choose (`/my-stock-manager` by default). New and re-keyworded images are uploaded, renames
+  move the folder, and deletions made while sync is on are deleted on the cloud too. It is
+  one-way, Wi-Fi only by default, and never touches files it did not upload itself.
+- **Pulls everything back from NextCloud on request** - after reinstalling, or on a new
+  phone, one tap downloads every event and image, with its title, description and keywords
+  read back out of the file. It never deletes anything on the phone.
+- **Keeps your API key and NextCloud app password in EncryptedSharedPreferences**,
+  Keystore-backed and excluded from backup.
 
 ## Uploading stays manual
 
 MyStockManager never connects to Adobe Stock or Shutterstock. It has no agency login, stores no
-agency credentials, and does not submit, schedule or automate uploads. Its only network call is
-to the OpenAI API, for metadata.
+agency credentials, and does not submit, schedule or automate uploads. It talks to the OpenAI API,
+for metadata, and, only if you set up sync, to your own NextCloud server, as a backup copy of
+your events.
 
 All it prepares is files. Each event is its own folder under `Pictures/StockReady/`, so when you
 open an agency's upload form and add files, the system picker already shows that shoot grouped

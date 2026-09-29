@@ -49,9 +49,6 @@ interface FolderDao {
     @Query("UPDATE folders SET location = :location, updatedAt = :now WHERE id = :id")
     suspend fun setLocation(id: Long, location: String?, now: Long)
 
-    @Query("DELETE FROM folders WHERE id = :id")
-    suspend fun delete(id: Long)
-
     @Query("SELECT COUNT(*) FROM folders WHERE name = :name COLLATE NOCASE")
     suspend fun countWithName(name: String): Int
 }

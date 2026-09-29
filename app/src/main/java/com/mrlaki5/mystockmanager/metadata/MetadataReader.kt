@@ -38,6 +38,7 @@ object MetadataReader {
 
         var xmpSubjects = emptyList<String>()
         var xmpTitle: String? = null
+        var xmpCategory: String? = null
         if (!rawXmp.isNullOrBlank()) {
             runCatching {
                 val xmp = XMPMetaFactory.parseFromString(rawXmp)
@@ -48,6 +49,7 @@ object MetadataReader {
                 xmpTitle = xmp
                     .getLocalizedText(XMPConst.NS_DC, "title", null, XMPConst.X_DEFAULT)
                     ?.value
+                xmpCategory = xmp.getPropertyString(XMPConst.NS_PHOTOSHOP, "Category")
             }
         }
 
@@ -59,6 +61,7 @@ object MetadataReader {
             xmpSubjects = xmpSubjects,
             xmpTitle = xmpTitle,
             rawXmp = rawXmp,
+            xmpCategory = xmpCategory,
         )
     }
 }

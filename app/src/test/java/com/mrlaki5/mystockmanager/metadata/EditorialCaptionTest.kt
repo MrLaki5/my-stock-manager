@@ -87,4 +87,36 @@ class EditorialCaptionTest {
         assertEquals(IPTC_OBJECT_NAME_MAX, metadata.title.length)
         assertTrue(long.startsWith(metadata.title))
     }
+
+    @Test
+    fun `parse undoes build, recovering the location and the body`() {
+        val caption = EditorialCaption.build("Belgrade, Serbia", "2026-05-23", body)
+        assertEquals(
+            EditorialCaption.Parts("Belgrade, Serbia", body),
+            EditorialCaption.parse(caption, "2026-05-23", knownLocation = null),
+        )
+        assertEquals(
+            EditorialCaption.Parts(null, body),
+            EditorialCaption.parse(EditorialCaption.build(null, "2026-05-23", body), "2026-05-23", null),
+        )
+    }
+
+    @Test
+    fun `parse keeps a location that itself contains the separator`() {
+        val caption = EditorialCaption.build("Novi Sad - Petrovaradin", "2026-05-23", body)
+        assertEquals("Novi Sad - Petrovaradin", EditorialCaption.parse(caption, "2026-05-23", null).location)
+    }
+
+    @Test
+    fun `parse strips an undated lead only when the location is already known`() {
+        val caption = EditorialCaption.build("Vevey, Switzerland", null, body)
+        assertEquals(EditorialCaption.Parts("Vevey, Switzerland", body), EditorialCaption.parse(caption, null, "Vevey, Switzerland"))
+        assertEquals(EditorialCaption.Parts(null, caption), EditorialCaption.parse(caption, null, null))
+    }
+
+    @Test
+    fun `parse leaves a caption it did not write untouched`() {
+        val foreign = "Note: shot on film"
+        assertEquals(EditorialCaption.Parts(null, foreign), EditorialCaption.parse(foreign, "2026-05-23", "Vevey"))
+    }
 }

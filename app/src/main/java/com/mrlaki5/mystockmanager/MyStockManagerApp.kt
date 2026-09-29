@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
+import com.mrlaki5.mystockmanager.nextcloud.SyncCoordinator
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +19,9 @@ class MyStockManagerApp : Application(), Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var repository: StockRepository
 
+    // Lazy so building it, and opening the Keystore-backed prefs it reads, happens off the main thread.
+    @Inject lateinit var syncCoordinator: dagger.Lazy<SyncCoordinator>
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -30,10 +34,12 @@ class MyStockManagerApp : Application(), Configuration.Provider {
         super.onCreate()
         // A process death mid-generation leaves rows stuck in GENERATING with no worker
         // behind them; clear those so the UI never shows a permanent spinner.
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+        val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        appScope.launch {
             runCatching { repository.resetStuckGenerating() }
             runCatching { repository.migrateLegacyPrivateFiles() }
             runCatching { repository.backfillCaptureDates() }
         }
+        appScope.launch { syncCoordinator.get().start(appScope) }
     }
 }

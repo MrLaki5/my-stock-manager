@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.data.db.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -68,4 +69,6 @@ data class ImageEntity(
     /** MediaStore row for the published copy in Pictures/StockReady/<event>/, if any. */
     val mediaStoreUri: String? = null,
     val exportedAt: Long? = null,
+    /** Bumped each time the album file is rewritten, so sync knows the cloud copy is stale. */
+    @ColumnInfo(defaultValue = "1") val fileVersion: Long = 1,
 )

@@ -68,7 +68,10 @@ import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
+import com.mrlaki5.mystockmanager.nextcloud.CloudMark
+import com.mrlaki5.mystockmanager.ui.components.CloudBadge
 import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
+import com.mrlaki5.mystockmanager.ui.components.label
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +85,7 @@ fun ImageDetailScreen(
     val dirty by viewModel.dirty.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val cloud by viewModel.cloud.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
 
@@ -183,6 +187,22 @@ fun ImageDetailScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            cloud?.let { status ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CloudBadge(status.mark)
+                    Text(
+                        status.error?.let { "${status.mark.label()}: $it" } ?: status.mark.label(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (status.mark == CloudMark.FAILED) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             current.generationError?.takeIf { current.state == ImageState.GENERATION_FAILED }

@@ -7,18 +7,31 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.mrlaki5.mystockmanager.data.db.dao.FolderDao
 import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
+import com.mrlaki5.mystockmanager.data.db.dao.PullDao
+import com.mrlaki5.mystockmanager.data.db.dao.SyncDao
 import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
+import com.mrlaki5.mystockmanager.data.db.entity.RemoteDeletionEntity
+import com.mrlaki5.mystockmanager.data.db.entity.SyncFolderEntity
+import com.mrlaki5.mystockmanager.data.db.entity.SyncImageEntity
 
 @Database(
-    entities = [FolderEntity::class, ImageEntity::class],
-    version = 4,
+    entities = [
+        FolderEntity::class,
+        ImageEntity::class,
+        SyncFolderEntity::class,
+        SyncImageEntity::class,
+        RemoteDeletionEntity::class,
+    ],
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
 abstract class StockDatabase : RoomDatabase() {
     abstract fun folderDao(): FolderDao
     abstract fun imageDao(): ImageDao
+    abstract fun syncDao(): SyncDao
+    abstract fun pullDao(): PullDao
 
     companion object {
         const val NAME = "stock.db"
@@ -50,6 +63,28 @@ abstract class StockDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE images ADD COLUMN capturedOn TEXT")
+            }
+        }
+
+        /** NextCloud sync bookkeeping, kept out of `images` so uploads do not re-run the grid queries. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE images ADD COLUMN fileVersion INTEGER NOT NULL DEFAULT 1")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sync_folders` (`folderId` INTEGER NOT NULL, " +
+                        "`remoteName` TEXT NOT NULL, `localName` TEXT NOT NULL, PRIMARY KEY(`folderId`), " +
+                        "FOREIGN KEY(`folderId`) REFERENCES `folders`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sync_images` (`imageId` INTEGER NOT NULL, " +
+                        "`remoteFileName` TEXT NOT NULL, `syncedVersion` INTEGER, `remoteSize` INTEGER, " +
+                        "`failedVersion` INTEGER, `error` TEXT, PRIMARY KEY(`imageId`), " +
+                        "FOREIGN KEY(`imageId`) REFERENCES `images`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `remote_deletions` (`path` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, PRIMARY KEY(`path`))"
+                )
             }
         }
     }

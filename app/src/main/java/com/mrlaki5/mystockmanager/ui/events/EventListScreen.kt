@@ -56,6 +56,7 @@ fun EventListScreen(
 ) {
     val events by viewModel.events.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val syncEnabled by viewModel.syncEnabled.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -148,7 +149,8 @@ fun EventListScreen(
             text = {
                 Text(
                     "This removes the ${event.total} image(s) in this event from the " +
-                        "StockReady album. The originals in your camera roll are not touched."
+                        "StockReady album. The originals in your camera roll are not touched." +
+                        if (syncEnabled) " Its folder on NextCloud is deleted too." else ""
                 )
             },
             confirmButton = {
