@@ -5,12 +5,18 @@ import androidx.core.net.toUri
 import com.mrlaki5.mystockmanager.data.db.dao.FolderDao
 import com.mrlaki5.mystockmanager.data.db.dao.FolderSummary
 import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
+import com.mrlaki5.mystockmanager.data.db.dao.SyncDao
 import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
 import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
+import com.mrlaki5.mystockmanager.nextcloud.CloudMark
+import com.mrlaki5.mystockmanager.nextcloud.CloudStatus
+import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
+import com.mrlaki5.mystockmanager.nextcloud.mark
+import com.mrlaki5.mystockmanager.nextcloud.status
 import com.mrlaki5.mystockmanager.storage.CaptureDate
 import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.ImportCopier
@@ -18,6 +24,7 @@ import com.mrlaki5.mystockmanager.storage.ImportSummary
 import com.mrlaki5.mystockmanager.storage.MediaStoreExporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -37,6 +44,8 @@ class StockRepository @Inject constructor(
     private val fileStore: AppFileStore,
     private val mediaStore: MediaStoreExporter,
     private val embedder: MetadataEmbedder,
+    private val syncDao: SyncDao,
+    private val nextcloud: NextcloudSettings,
 ) {
 
     fun observeEvents(): Flow<List<FolderSummary>> = folderDao.observeSummaries()
@@ -47,6 +56,15 @@ class StockRepository @Inject constructor(
         imageDao.observeByFolder(folderId)
 
     fun observeImage(id: Long): Flow<ImageEntity?> = imageDao.observeById(id)
+
+    /** Images with no mark are left out of the map. */
+    fun observeCloudMarks(folderId: Long): Flow<Map<Long, CloudMark>> =
+        combine(syncDao.observeCloudRows(folderId), nextcloud.enabledOffMain()) { rows, enabled ->
+            rows.mapNotNull { row -> row.mark(enabled)?.let { row.imageId to it } }.toMap()
+        }
+
+    fun observeCloudStatus(imageId: Long): Flow<CloudStatus?> =
+        combine(syncDao.observeCloudRow(imageId), nextcloud.enabledOffMain()) { row, enabled -> row?.status(enabled) }
 
     /**
      * The event location an image inherits, for a screen that wants to render the caption
@@ -135,12 +153,10 @@ class StockRepository @Inject constructor(
      * Deletes the event and the copies it holds. Safe by construction: these are the
      * app's own copies, and the originals in the camera roll were never touched.
      */
-    suspend fun deleteEvent(id: Long) {
-        imageDao.observeByFolder(id).first().forEach { image ->
-            removeAlbumCopy(image)
-            imageDao.delete(image.id)
-        }
-        folderDao.delete(id)
+    suspend fun deleteEvent(id: Long) = withContext(Dispatchers.IO) {
+        imageDao.observeByFolder(id).first().forEach { removeAlbumCopy(it) }
+        // With sync off the cloud copy is deliberately kept, as an archive.
+        syncDao.deleteEvent(id, tombstone = nextcloud.enabled.value)
     }
 
     /**
@@ -157,7 +173,7 @@ class StockRepository @Inject constructor(
         for (id in ids) {
             val image = imageDao.getById(id) ?: continue
             if (!removeAlbumCopy(image)) albumFilesLeft++
-            imageDao.delete(id)
+            syncDao.deleteImage(id, tombstone = nextcloud.enabled.value)
             deleted++
         }
         DeleteSummary(deleted, albumFilesLeft)

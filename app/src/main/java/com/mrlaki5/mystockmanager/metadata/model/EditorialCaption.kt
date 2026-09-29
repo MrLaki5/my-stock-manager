@@ -38,6 +38,25 @@ object EditorialCaption {
         return if (lead.isEmpty()) text else "$lead: $text"
     }
 
+    data class Parts(val location: String?, val body: String)
+
+    /** The inverse of [build]: splits off only a lead [build] could have produced, never a guessed one. */
+    fun parse(caption: String, capturedOn: String?, knownLocation: String?): Parts {
+        val text = caption.trim()
+        capturedOn?.let(::formatDate)?.let { date ->
+            if (text.startsWith("$date: ")) return Parts(null, text.removePrefix("$date: ").trim())
+            val marker = "$SEPARATOR$date: "
+            val at = text.indexOf(marker)
+            if (at > 0) return Parts(text.substring(0, at).trim(), text.substring(at + marker.length).trim())
+        }
+        // Without a date the lead is only recognisable when the event's location is already known.
+        val location = knownLocation?.trim()?.takeIf { it.isNotEmpty() }
+        if (location != null && text.startsWith("$location: ")) {
+            return Parts(location, text.removePrefix("$location: ").trim())
+        }
+        return Parts(null, text)
+    }
+
     /** [capturedOn] is an ISO local date; anything unparseable is treated as absent. */
     private fun formatDate(capturedOn: String): String? =
         runCatching { LocalDate.parse(capturedOn).format(MONTH_DAY_YEAR) }.getOrNull()

@@ -9,6 +9,8 @@ import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
+import com.mrlaki5.mystockmanager.nextcloud.CloudMark
+import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
 import com.mrlaki5.mystockmanager.work.WorkScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,7 @@ class EventDetailViewModel @Inject constructor(
     private val repository: StockRepository,
     private val workScheduler: WorkScheduler,
     private val keyStore: SecureKeyStore,
+    nextcloud: NextcloudSettings,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -54,6 +57,12 @@ class EventDetailViewModel @Inject constructor(
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
+
+    val syncEnabled: StateFlow<Boolean> = nextcloud.enabledOffMain()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val cloudMarks: StateFlow<Map<Long, CloudMark>> = repository.observeCloudMarks(eventId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     fun albumNameFor(eventName: String): String = repository.albumNameFor(eventName)
 

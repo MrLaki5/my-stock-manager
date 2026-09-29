@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrlaki5.mystockmanager.data.db.dao.FolderSummary
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
+import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,10 +17,14 @@ import javax.inject.Inject
 @HiltViewModel
 class EventListViewModel @Inject constructor(
     private val repository: StockRepository,
+    nextcloud: NextcloudSettings,
 ) : ViewModel() {
 
     val events: StateFlow<List<FolderSummary>> = repository.observeEvents()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val syncEnabled: StateFlow<Boolean> = nextcloud.enabledOffMain()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -36,7 +41,7 @@ class EventListViewModel @Inject constructor(
 
     fun deleteEvent(id: Long) = viewModelScope.launch {
         repository.deleteEvent(id)
-        _message.value = "Event deleted. Its images moved to unfiled."
+        _message.value = "Event deleted"
     }
 
     fun consumeMessage() {

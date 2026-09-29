@@ -22,6 +22,7 @@ data class VerificationResult(
     val xmpSubjects: List<String>,
     val xmpTitle: String?,
     val rawXmp: String?,
+    val xmpCategory: String? = null,
 ) {
     /**
      * Headline is checked as well as Object Name: both are written, and a field that is

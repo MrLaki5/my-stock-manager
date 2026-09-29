@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
+import com.mrlaki5.mystockmanager.nextcloud.CloudStatus
 import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
@@ -62,6 +63,9 @@ class ImageDetailViewModel @Inject constructor(
 
     val image: StateFlow<ImageEntity?> = repository.observeImage(imageId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val cloud: StateFlow<CloudStatus?> = repository.observeCloudStatus(imageId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _draft = MutableStateFlow<MetadataDraft?>(null)
     val draft: StateFlow<MetadataDraft?> = _draft.asStateFlow()

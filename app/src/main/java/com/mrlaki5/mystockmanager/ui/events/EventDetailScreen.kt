@@ -63,6 +63,8 @@ import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
+import com.mrlaki5.mystockmanager.nextcloud.CloudMark
+import com.mrlaki5.mystockmanager.ui.components.CloudBadge
 import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,6 +79,8 @@ fun EventDetailScreen(
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val syncEnabled by viewModel.syncEnabled.collectAsStateWithLifecycle()
+    val cloudMarks by viewModel.cloudMarks.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(message) {
@@ -108,6 +112,7 @@ fun EventDetailScreen(
     if (confirmingDelete) {
         DeleteDialog(
             count = selection.size,
+            syncEnabled = syncEnabled,
             onDismiss = { confirmingDelete = false },
             onConfirm = {
                 viewModel.deleteSelected()
@@ -190,6 +195,7 @@ fun EventDetailScreen(
                         items(loaded, key = { it.id }) { image ->
                             ImageCell(
                                 image = image,
+                                cloud = cloudMarks[image.id],
                                 selected = image.id in selection,
                                 // Tap opens the image; it only toggles once a selection
                                 // is already running, so the multi-select flow survives.
@@ -284,6 +290,7 @@ private fun StatusSummary(
 @Composable
 private fun ImageCell(
     image: ImageEntity,
+    cloud: CloudMark?,
     selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -313,6 +320,8 @@ private fun ImageCell(
             state = image.state,
             modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
         )
+
+        cloud?.let { CloudBadge(it, Modifier.align(Alignment.TopStart).padding(4.dp)) }
 
         if (selected) {
             Box(
@@ -362,7 +371,7 @@ private fun SelectionBar(count: Int, onDelete: () -> Unit, onGenerate: () -> Uni
 }
 
 @Composable
-private fun DeleteDialog(count: Int, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun DeleteDialog(count: Int, syncEnabled: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete $count image${if (count == 1) "" else "s"}?") },
@@ -370,7 +379,7 @@ private fun DeleteDialog(count: Int, onDismiss: () -> Unit, onConfirm: () -> Uni
             Text(
                 "This removes them from the StockReady album, along with any metadata " +
                     "already generated for them. The originals in your camera roll are " +
-                    "not touched."
+                    "not touched." + if (syncEnabled) " They are deleted from NextCloud too." else ""
             )
         },
         confirmButton = {
