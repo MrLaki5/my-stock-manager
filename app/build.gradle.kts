@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -5,6 +7,13 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+
+// Local builds read keystore.properties (gitignored); CI passes the same values as env vars.
+val keystoreProperties = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
+}
+fun signingValue(key: String, env: String): String? = keystoreProperties.getProperty(key) ?: System.getenv(env)
+val releaseStoreFile = signingValue("storeFile", "RELEASE_STORE_FILE")
 
 android {
     namespace = "com.mrlaki5.mystockmanager"
@@ -28,6 +37,17 @@ android {
         ksp { arg("room.schemaLocation", "$projectDir/schemas") }
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = signingValue("storePassword", "RELEASE_STORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "RELEASE_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // Phase 0 verifies the Commons Imaging metadata path under R8, since the
@@ -38,10 +58,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // TODO(pre-release): replace with a real release signing config. Debug
-            // signing is here only so `assembleRelease` yields an installable APK for
-            // the on-device Phase 0 check.
-            signingConfig = signingConfigs.getByName("debug")
+            // Without a configured keystore the release build is produced unsigned.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {
