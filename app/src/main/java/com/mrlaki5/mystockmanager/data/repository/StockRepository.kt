@@ -125,7 +125,7 @@ class StockRepository @Inject constructor(
         }
         val now = System.currentTimeMillis()
         return runCatching {
-            folderDao.insert(FolderEntity(name = trimmed, createdAt = now, updatedAt = now))
+            folderDao.insert(FolderEntity(name = trimmed, createdAt = now, updatedAt = now, position = folderDao.topPosition()))
         }
     }
 
@@ -195,6 +195,8 @@ class StockRepository @Inject constructor(
             ?: return ImportSummary(0, 0, uris.size)
         return importCopier.import(uris, folderId, event.name)
     }
+
+    suspend fun reorderEvents(orderedIds: List<Long>) = folderDao.reorder(orderedIds)
 
     /** Remembers the location so the next generation for this event pre-fills it. */
     suspend fun setEventLocation(id: Long, location: String?) =

@@ -44,7 +44,7 @@ abstract class PullDao : PullStore {
         var candidate = name
         var suffix = 2
         while (countWithName(candidate) > 0) candidate = "$name (${suffix++})"
-        val id = insertFolder(FolderEntity(name = candidate, createdAt = now, updatedAt = now))
+        val id = insertFolder(FolderEntity(name = candidate, createdAt = now, updatedAt = now, position = topPosition()))
         upsertSyncFolder(SyncFolderEntity(id, remoteName, candidate))
         return LocalFolder(id, candidate, location = null, remoteName = remoteName)
     }
@@ -112,6 +112,9 @@ abstract class PullDao : PullStore {
 
     @Query("SELECT COUNT(*) FROM folders WHERE name = :name COLLATE NOCASE")
     protected abstract suspend fun countWithName(name: String): Int
+
+    @Query("SELECT COALESCE(MIN(position), 0) - 1 FROM folders")
+    protected abstract suspend fun topPosition(): Int
 
     @Query("SELECT fileVersion FROM images WHERE id = :imageId")
     protected abstract suspend fun fileVersionOf(imageId: Long): Long

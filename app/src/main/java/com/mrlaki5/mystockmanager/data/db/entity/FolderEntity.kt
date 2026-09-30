@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.data.db.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -24,4 +25,6 @@ data class FolderEntity(
      * location keywords.
      */
     val location: String? = null,
+    /** Place in the user-arranged event list; lowest is shown first. */
+    @ColumnInfo(defaultValue = "0") val position: Int = 0,
 )
