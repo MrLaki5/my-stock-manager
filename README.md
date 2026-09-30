@@ -16,8 +16,8 @@ Shutterstock already carries its metadata.
   picker immediately. Your camera roll is never touched, and there is no second private copy
   to drift out of sync.
 - **Generates metadata with OpenAI vision** - title, description, up to 49 relevance-ordered
-  keywords, and a category. You can add a location, which the model cannot infer from the
-  pixels and which buyers search by.
+  keywords, and a category. An optional hint adds what the model cannot see in the pixels,
+  such as the place, subject or event; a place it names leads the caption.
 - **Embeds it losslessly** into IPTC IIM (APP13) and XMP (APP1). Segments are spliced;
   pixels are never decoded or re-encoded.
 - **Verifies every write.** The embedded copy is read back and compared before the album
@@ -70,3 +70,35 @@ between `gpt-4o-mini` (default) and `gpt-4o`.
 
 Kotlin · Jetpack Compose · Room · Hilt · WorkManager · Commons Imaging + Adobe XMPCore ·
 minSdk 29
+
+## Release
+
+Release builds are signed with an upload key that is never committed. Google Play re-signs
+the app with its own app-signing key.
+
+**One-time setup.** Create the upload key in the gitignored `keys/` folder, and back it up
+outside the repo together with its password. Without it you cannot publish updates.
+
+```bash
+mkdir -p keys
+keytool -genkeypair -v -keystore keys/mystockmanager-upload.jks \
+  -alias upload -keyalg RSA -keysize 4096 -validity 10000
+cp keystore.properties.example keystore.properties   # then fill in the password twice
+```
+
+**Local build:** `./gradlew bundleRelease` writes `app/build/outputs/bundle/release/app-release.aab`,
+which is the file you upload to Play. Without `keystore.properties` the build is produced
+unsigned.
+
+**CI build:** pushing a tag equal to `versionName` (a leading `v` is allowed) builds a signed
+AAB and APK and attaches both to a GitHub release. Add these repository secrets first:
+
+| Secret | Value |
+|---|---|
+| `RELEASE_KEYSTORE_BASE64` | `base64 -w0 keys/mystockmanager-upload.jks` |
+| `RELEASE_STORE_PASSWORD` | keystore password, only the password itself |
+| `RELEASE_KEY_ALIAS` | `upload` |
+| `RELEASE_KEY_PASSWORD` | the same password (PKCS12 keys share it) |
+
+Before each release, bump both `versionCode` (Play rejects a code it has seen before) and
+`versionName` in `app/build.gradle.kts`.
