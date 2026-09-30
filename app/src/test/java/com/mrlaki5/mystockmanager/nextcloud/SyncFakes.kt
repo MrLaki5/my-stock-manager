@@ -13,6 +13,7 @@ class FakeSyncStore : SyncStore, PullStore {
         var keywords: List<String> = emptyList()
         var category: String? = null
         var capturedOn: String? = null
+        var captionPlace: String? = null
     }
     data class SyncFolder(val remoteName: String, val localName: String)
     data class SyncImage(
@@ -219,6 +220,7 @@ class FakeSyncStore : SyncStore, PullStore {
         keywords = image.keywords
         category = image.category
         capturedOn = image.capturedOn
+        captionPlace = image.captionPlace
     }
 }
 

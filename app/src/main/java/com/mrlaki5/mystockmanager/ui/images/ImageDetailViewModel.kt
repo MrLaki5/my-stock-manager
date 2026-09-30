@@ -24,7 +24,7 @@ import javax.inject.Inject
 /**
  * The editable copy of an image's metadata.
  *
- * [description] is the caption *body*, which is what the row stores. The location and date
+ * [description] is the caption *body*, which is what the row stores. The place and date
  * are prepended when it is written — see [ImageDetailViewModel.caption].
  */
 data class MetadataDraft(
@@ -105,7 +105,7 @@ class ImageDetailViewModel @Inject constructor(
         // throw away edits the user is still in the middle of making.
         viewModelScope.launch {
             val image = repository.observeImage(imageId).filterNotNull().first()
-            _lead.value = CaptionLead(repository.locationFor(image), image.capturedOn)
+            _lead.value = CaptionLead(image.captionPlace, image.capturedOn)
             seed(MetadataDraft.of(image))
         }
     }
@@ -176,7 +176,7 @@ class ImageDetailViewModel @Inject constructor(
             _busy.value = true
             val request = StockMetadata(
                 title = draft.title,
-                // The body. The repository prepends the location and date.
+                // The body. The repository prepends the place and date.
                 description = draft.description,
                 keywords = draft.keywords,
                 category = draft.category.trim().takeIf { it.isNotEmpty() },

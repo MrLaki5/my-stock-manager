@@ -14,7 +14,7 @@ import kotlinx.serialization.json.jsonPrimitive
  * is respected in practice but is not a guarantee we should hand to an upload. The
  * clamp in [StockMetadata.normalized] is the actual enforcement point.
  *
- * The description here is the caption *body*. The caller prepends the location and date
+ * The description here is the caption *body*. The caller prepends the place and date
  * with [com.mrlaki5.mystockmanager.metadata.model.EditorialCaption] before it is written.
  */
 object MetadataParser {
@@ -36,6 +36,10 @@ object MetadataParser {
             secondaryCategory = obj["secondary_category"]?.stringOrNull(),
         ).normalized()
     }
+
+    fun parsePlace(content: String, json: Json = Json { ignoreUnknownKeys = true }): String? =
+        runCatching { json.parseToJsonElement(content).jsonObject["place"]?.stringOrNull()?.trim() }
+            .getOrNull()?.takeIf { it.isNotEmpty() }
 
     private fun kotlinx.serialization.json.JsonElement.stringOrNull(): String? =
         if (this is JsonNull) null else jsonPrimitive.content.takeIf { it.isNotBlank() }

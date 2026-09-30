@@ -102,22 +102,22 @@ class EventDetailViewModel @Inject constructor(
         }
     }
 
-    /** [location] is optional; blank means "tell the model nothing about place". */
-    fun generateSelected(location: String?) {
+    /** [hint] is optional; blank means the model works from the pixels alone. */
+    fun generateSelected(hint: String?) {
         val ids = _selection.value.toList()
         if (ids.isEmpty()) return
         if (!keyStore.hasApiKey) {
             _message.value = "Add your OpenAI API key in Settings first."
             return
         }
-        val trimmed = location?.trim()?.takeIf { it.isNotEmpty() }
-        viewModelScope.launch { repository.setEventLocation(eventId, trimmed) }
+        val trimmed = hint?.trim()?.takeIf { it.isNotEmpty() }
+        viewModelScope.launch { repository.setEventHint(eventId, trimmed) }
 
         workScheduler.enqueueGeneration(ids, trimmed)
         _selection.value = emptySet()
         _message.value = buildString {
             append("Queued ${ids.size} image${if (ids.size == 1) "" else "s"}")
-            if (trimmed != null) append(" · location: $trimmed")
+            if (trimmed != null) append(" · hint: $trimmed")
         }
     }
 

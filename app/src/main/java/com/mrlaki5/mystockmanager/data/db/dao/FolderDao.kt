@@ -47,8 +47,8 @@ abstract class FolderDao {
     @Query("UPDATE folders SET name = :name, updatedAt = :now WHERE id = :id")
     abstract suspend fun rename(id: Long, name: String, now: Long)
 
-    @Query("UPDATE folders SET location = :location, updatedAt = :now WHERE id = :id")
-    abstract suspend fun setLocation(id: Long, location: String?, now: Long)
+    @Query("UPDATE folders SET location = :hint, updatedAt = :now WHERE id = :id")
+    abstract suspend fun setHint(id: Long, hint: String?, now: Long)
 
     @Query("SELECT COUNT(*) FROM folders WHERE name = :name COLLATE NOCASE")
     abstract suspend fun countWithName(name: String): Int

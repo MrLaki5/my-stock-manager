@@ -36,7 +36,8 @@ interface ImageDao {
         UPDATE images
         SET title = :title, description = :description, keywords = :keywords,
             category = :category, state = :state, generatedAt = :generatedAt,
-            model = :model, generationError = NULL, fileVersion = fileVersion + 1
+            model = :model, captionPlace = :captionPlace, generationError = NULL,
+            fileVersion = fileVersion + 1
         WHERE id = :id
         """
     )
@@ -49,6 +50,7 @@ interface ImageDao {
         state: ImageState,
         generatedAt: Long,
         model: String?,
+        captionPlace: String,
     )
 
     /**
@@ -89,4 +91,10 @@ interface ImageDao {
 
     @Query("UPDATE images SET capturedOn = :capturedOn WHERE id = :id")
     suspend fun setCapturedOn(id: Long, capturedOn: String?)
+
+    @Query("SELECT * FROM images WHERE captionPlace IS NULL AND description IS NOT NULL AND mediaStoreUri IS NOT NULL")
+    suspend fun getWithoutCaptionPlace(): List<ImageEntity>
+
+    @Query("UPDATE images SET captionPlace = :place WHERE id = :id")
+    suspend fun setCaptionPlace(id: Long, place: String)
 }

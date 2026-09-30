@@ -43,7 +43,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val imageId = inputData.getLong(KEY_IMAGE_ID, -1L)
-        val location = inputData.getString(KEY_LOCATION)?.takeIf { it.isNotBlank() }
+        val hint = inputData.getString(KEY_HINT)?.takeIf { it.isNotBlank() }
         if (imageId <= 0) return Result.failure()
 
         val image = imageDao.getById(imageId) ?: return Result.failure()
@@ -67,7 +67,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
             val encoded = runCatching { ImageEncoder.toBase64Jpeg(source) }
                 .getOrElse { return fail(imageId, "Could not decode image: ${it.message}") }
 
-            return when (val result = openAiClient.generate(apiKey, model, encoded, location)) {
+            return when (val result = openAiClient.generate(apiKey, model, encoded, hint)) {
                 is OpenAiResult.Transient -> {
                     // Stays GENERATING: a retry really is still in flight.
                     imageDao.markFailed(imageId, ImageState.GENERATING, result.message)
@@ -83,7 +83,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
                     val body = result.metadata.description
                     val captioned = result.metadata.copy(
                         description = EditorialCaption.build(
-                            location = location,
+                            location = result.place,
                             capturedOn = image.capturedOn,
                             body = body,
                         ),
@@ -108,6 +108,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
                         state = ImageState.GENERATED,
                         generatedAt = now,
                         model = model,
+                        captionPlace = result.place.orEmpty(),
                     )
                     imageDao.markExported(imageId, image.mediaStoreUri, now)
                     Result.success()
@@ -125,6 +126,6 @@ class GenerateMetadataWorker @AssistedInject constructor(
 
     companion object {
         const val KEY_IMAGE_ID = "imageId"
-        const val KEY_LOCATION = "location"
+        const val KEY_HINT = "hint"
     }
 }

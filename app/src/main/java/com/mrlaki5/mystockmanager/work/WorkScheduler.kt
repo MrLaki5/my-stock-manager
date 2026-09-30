@@ -18,14 +18,14 @@ class WorkScheduler @Inject constructor(
     @param:ApplicationContext private val context: Context,
 ) {
 
-    fun enqueueGeneration(imageIds: List<Long>, location: String? = null) {
+    fun enqueueGeneration(imageIds: List<Long>, hint: String? = null) {
         val workManager = WorkManager.getInstance(context)
         for (imageId in imageIds) {
             val request = OneTimeWorkRequestBuilder<GenerateMetadataWorker>()
                 .setInputData(
                     Data.Builder()
                         .putLong(GenerateMetadataWorker.KEY_IMAGE_ID, imageId)
-                        .putString(GenerateMetadataWorker.KEY_LOCATION, location)
+                        .putString(GenerateMetadataWorker.KEY_HINT, hint)
                         .build()
                 )
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

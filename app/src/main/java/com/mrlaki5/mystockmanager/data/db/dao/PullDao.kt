@@ -70,6 +70,7 @@ abstract class PullDao : PullStore {
                 state = stateOf(image),
                 title = image.title,
                 description = image.description,
+                captionPlace = image.captionPlace,
                 keywords = image.keywords,
                 category = image.category,
                 generatedAt = now.takeIf { image.generated },
@@ -92,6 +93,7 @@ abstract class PullDao : PullStore {
             state = stateOf(image),
             title = image.title,
             description = image.description,
+            captionPlace = image.captionPlace,
             keywords = image.keywords,
             category = image.category,
             generatedAt = now.takeIf { image.generated },
@@ -136,6 +138,7 @@ abstract class PullDao : PullStore {
         UPDATE images
         SET sha256 = :sha256, widthPx = :widthPx, heightPx = :heightPx, byteSize = :byteSize,
             capturedOn = :capturedOn, state = :state, title = :title, description = :description,
+            captionPlace = :captionPlace,
             keywords = :keywords, category = :category, generatedAt = :generatedAt,
             mediaStoreUri = :mediaStoreUri, generationError = NULL, fileVersion = fileVersion + 1
         WHERE id = :id
@@ -151,6 +154,7 @@ abstract class PullDao : PullStore {
         state: ImageState,
         title: String?,
         description: String?,
+        captionPlace: String?,
         keywords: List<String>,
         category: String?,
         generatedAt: Long?,

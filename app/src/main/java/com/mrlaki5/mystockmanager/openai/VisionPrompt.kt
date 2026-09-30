@@ -21,24 +21,32 @@ object VisionPrompt {
         You are given one photograph. Describe only what is actually visible; never invent
         brands, names, or events you cannot see.
 
-        The photographer may state where the photo was taken. Treat any location they give
-        you as fact even if you cannot recognise it, and do not contradict it — but do not
-        infer any further places, landmarks or regions beyond what they stated and what you
-        can actually see.
+        The photographer may add a hint: context you cannot get from the pixels, such as where
+        the photo was taken, what the subject is, or what event it shows. Treat the hint as
+        fact even if you cannot recognise it, and do not contradict it — but do not infer any
+        further places, names or events beyond what it states and what you can actually see.
     """.trimIndent()
 
-    fun user(location: String? = null): String = buildString {
+    fun user(hint: String? = null): String = buildString {
         appendLine(BASE)
-        if (!location.isNullOrBlank()) {
+        appendLine()
+        if (hint.isNullOrBlank()) {
+            appendLine("There is no hint from the photographer. Set place to null.")
+        } else {
+            appendLine(
+                "The photographer's hint: $hint. Treat it as fact and use what it says in the " +
+                    "title, description and keywords where it reads naturally — buyers search " +
+                    "for the specific subject, event and place, so include those and their " +
+                    "sensible broader terms (for example city, region, country) among the " +
+                    "keywords. Do not add landmarks, names or districts the hint does not give."
+            )
             appendLine()
             appendLine(
-                "The photographer states this was taken at: $location. Treat it as fact. " +
+                "Place: if the hint states where the photo was taken, return that place as " +
+                    "written, only tidied for capitalisation, for example \"Kotor, Montenegro\". " +
                     "It is prepended to the description automatically, so do not open the " +
-                    "description with it — do work it into the title where it reads " +
-                    "naturally, and include the place and its sensible broader terms (for " +
-                    "example city, region, country) among the keywords, because buyers " +
-                    "search by place. Do not add landmarks or districts you were not told " +
-                    "about."
+                    "description with it. If the hint does not name a place, return null — " +
+                    "never guess one from the image."
             )
         }
     }
