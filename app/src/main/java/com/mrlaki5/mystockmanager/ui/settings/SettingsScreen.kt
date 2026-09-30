@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -111,9 +112,16 @@ fun SettingsScreen(
 
             HorizontalDivider()
             NextcloudSection(viewModel)
+
+            HorizontalDivider()
+            val uriHandler = LocalUriHandler.current
+            TextButton(onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) }) { Text("Privacy policy") }
         }
     }
 }
+
+private const val PRIVACY_POLICY_URL =
+    "https://github.com/MrLaki5/my-stock-manager/blob/main/PRIVACY.md"
 
 @Composable
 private fun NextcloudSection(viewModel: SettingsViewModel) {
