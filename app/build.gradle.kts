@@ -100,6 +100,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.coil.compose)
+    implementation(libs.reorderable)
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver3)

@@ -23,7 +23,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.SyncImageEntity
         SyncImageEntity::class,
         RemoteDeletionEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -84,6 +84,18 @@ abstract class StockDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `remote_deletions` (`path` TEXT NOT NULL, " +
                         "`createdAt` INTEGER NOT NULL, PRIMARY KEY(`path`))"
+                )
+            }
+        }
+
+        /** Adds the user-arranged event order, seeded from the old newest-first sort. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE folders ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "UPDATE folders SET position = (SELECT COUNT(*) FROM folders f2 " +
+                        "WHERE f2.createdAt > folders.createdAt " +
+                        "OR (f2.createdAt = folders.createdAt AND f2.id > folders.id))"
                 )
             }
         }

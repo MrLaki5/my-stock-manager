@@ -39,6 +39,10 @@ class EventListViewModel @Inject constructor(
         repository.renameEvent(id, name).onFailure { _message.value = it.message }
     }
 
+    fun reorderEvents(orderedIds: List<Long>) = viewModelScope.launch {
+        repository.reorderEvents(orderedIds)
+    }
+
     fun deleteEvent(id: Long) = viewModelScope.launch {
         repository.deleteEvent(id)
         _message.value = "Event deleted"
