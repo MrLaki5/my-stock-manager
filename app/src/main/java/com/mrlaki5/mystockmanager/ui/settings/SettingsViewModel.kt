@@ -115,10 +115,6 @@ class SettingsViewModel @Inject constructor(
 
     fun setFolder(value: String) = edit { it.copy(folder = value) }
 
-    fun discardAccount() {
-        _draft.value = _saved.value
-    }
-
     fun saveAccount() {
         val draft = _draft.value
         if (!draft.canSave || _busy.value) return

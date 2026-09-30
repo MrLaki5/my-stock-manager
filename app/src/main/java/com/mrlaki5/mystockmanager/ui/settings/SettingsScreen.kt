@@ -95,10 +95,7 @@ fun SettingsScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Hint(
-                "Stored encrypted on this device with a Keystore-backed key, and excluded " +
-                    "from backups. It is sent only to api.openai.com."
-            )
+            Hint("Stored encrypted on this device. Sent only to api.openai.com.")
 
             Text("Model", style = MaterialTheme.typography.titleSmall)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -130,7 +127,7 @@ private fun NextcloudSection(viewModel: SettingsViewModel) {
     val pulling by viewModel.pulling.collectAsStateWithLifecycle()
     var confirmingPull by remember { mutableStateOf(false) }
 
-    Text("NextCloud sync", style = MaterialTheme.typography.titleMedium)
+    Text("NextCloud sync (optional)", style = MaterialTheme.typography.titleMedium)
     OutlinedTextField(
         value = draft.server,
         onValueChange = viewModel::setServer,
@@ -169,22 +166,18 @@ private fun NextcloudSection(viewModel: SettingsViewModel) {
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         modifier = Modifier.fillMaxWidth(),
     )
-    Hint(
-        "Create an app password in NextCloud under Settings → Security. It is stored " +
-            "encrypted on this device and excluded from backups."
-    )
+    Hint("Create an app password in NextCloud → Settings → Security. Stored encrypted on this device.")
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = viewModel::saveAccount, enabled = dirty && draft.canSave && !busy) {
             Text("Save & test")
         }
-        TextButton(onClick = viewModel::discardAccount, enabled = dirty && !busy) { Text("Discard") }
         if (busy) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
     }
 
     SwitchRow(
         title = "Sync events to NextCloud",
-        subtitle = if (hasAccount) "Uploads every event and keeps the cloud folder up to date."
-        else "Save and test an account first.",
+        subtitle = if (hasAccount) "Uploads changes from this phone. Deleting here also deletes there."
+        else "Save & test an account first.",
         checked = syncEnabled,
         enabled = hasAccount,
         onCheckedChange = viewModel::setSyncEnabled,
@@ -200,19 +193,13 @@ private fun NextcloudSection(viewModel: SettingsViewModel) {
         Text(status, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         TextButton(onClick = viewModel::syncNow, enabled = syncEnabled) { Text("Sync now") }
     }
-    Hint(
-        "Changes sync on their own. Sync now also re-checks NextCloud: anything deleted or " +
-            "changed there is uploaded again, and images it refused are retried."
-    )
+    Hint("Sync now: re-uploads anything missing or changed to NextCloud.")
     OutlinedButton(
         onClick = { confirmingPull = true },
         enabled = hasAccount && !pulling && !dirty,
         modifier = Modifier.fillMaxWidth(),
     ) { Text("Pull from NextCloud") }
-    Hint(
-        "Downloads everything in ${draft.folder.ifBlank { "the sync folder" }} onto this phone, for example " +
-            "after reinstalling. It only runs when you tap it."
-    )
+    Hint("Pull: downloads the NextCloud folder to this phone, e.g. after a reinstall.")
 
     if (confirmingPull) {
         AlertDialog(
@@ -220,9 +207,8 @@ private fun NextcloudSection(viewModel: SettingsViewModel) {
             title = { Text("Pull from NextCloud?") },
             text = {
                 Text(
-                    "Every event and image on NextCloud that is missing here is downloaded. Where an " +
-                        "image exists on both, the phone's copy is replaced with the cloud's version. " +
-                        "Nothing on this phone is deleted."
+                    "Downloads everything missing here. Images on both sides are replaced with " +
+                        "the cloud version. Nothing on this phone is deleted."
                 )
             },
             confirmButton = {
@@ -234,13 +220,6 @@ private fun NextcloudSection(viewModel: SettingsViewModel) {
             dismissButton = { TextButton(onClick = { confirmingPull = false }) { Text("Cancel") } },
         )
     }
-    Hint(
-        "Sync is one-way: NextCloud follows the app, and nothing comes back unless you tap Pull. " +
-            "While sync is on, deleting an event or image also deletes it on NextCloud (into " +
-            "its trash bin). Anything deleted while sync is off stays on the cloud. Files you " +
-            "add to the folder yourself are never touched. Changing the server, user or folder " +
-            "uploads everything again to the new place."
-    )
 }
 
 @Composable
