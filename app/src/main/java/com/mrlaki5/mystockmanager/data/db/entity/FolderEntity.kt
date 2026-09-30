@@ -20,11 +20,11 @@ data class FolderEntity(
     val createdAt: Long,
     val updatedAt: Long,
     /**
-     * Optional place the shoot happened. The vision model cannot know this, so when it
-     * is supplied it is handed over as ground truth for titles, descriptions and
-     * location keywords.
+     * The last generation hint for this event, pre-filled next time: context the vision model
+     * cannot see, such as the place or what the subject is. Each image keeps its own caption
+     * place, so this is only a default.
      */
-    val location: String? = null,
+    @ColumnInfo(name = "location") val hint: String? = null,
     /** Place in the user-arranged event list; lowest is shown first. */
     @ColumnInfo(defaultValue = "0") val position: Int = 0,
 )

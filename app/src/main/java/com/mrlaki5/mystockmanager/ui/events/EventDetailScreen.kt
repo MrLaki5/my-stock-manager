@@ -90,21 +90,21 @@ fun EventDetailScreen(
         }
     }
 
-    var askingLocation by remember { mutableStateOf(false) }
+    var askingHint by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(MAX_PICK)
     ) { uris -> viewModel.importImages(uris) }
 
-    if (askingLocation) {
-        LocationDialog(
+    if (askingHint) {
+        HintDialog(
             count = selection.size,
-            initialLocation = event?.location.orEmpty(),
-            onDismiss = { askingLocation = false },
+            initialHint = event?.hint.orEmpty(),
+            onDismiss = { askingHint = false },
             onConfirm = {
                 viewModel.generateSelected(it)
-                askingLocation = false
+                askingHint = false
             },
         )
     }
@@ -159,7 +159,7 @@ fun EventDetailScreen(
                 SelectionBar(
                     count = selection.size,
                     onDelete = { confirmingDelete = true },
-                    onGenerate = { askingLocation = true },
+                    onGenerate = { askingHint = true },
                 )
             }
         },
@@ -182,7 +182,6 @@ fun EventDetailScreen(
                     StatusSummary(
                         images = loaded,
                         albumName = event?.name?.let(viewModel::albumNameFor) ?: "",
-                        location = event?.location,
                         onSelectUngenerated = viewModel::selectUngenerated,
                     )
                     LazyVerticalGrid(
@@ -214,37 +213,38 @@ fun EventDetailScreen(
 }
 
 @Composable
-private fun LocationDialog(
+private fun HintDialog(
     count: Int,
-    initialLocation: String,
+    initialHint: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    var location by remember { mutableStateOf(initialLocation) }
+    var hint by remember { mutableStateOf(initialHint) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Generate for $count image${if (count == 1) "" else "s"}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
-                    value = location,
-                    onValueChange = { location = it },
-                    label = { Text("Location (optional)") },
-                    placeholder = { Text("e.g. Kotor, Montenegro") },
-                    singleLine = true,
+                    value = hint,
+                    onValueChange = { hint = it },
+                    label = { Text("Hint (optional)") },
+                    placeholder = { Text("e.g. Kotor, Montenegro · 1972 Fiat 500 at a classic car show") },
+                    maxLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "The model cannot tell where a photo was taken. Anything you enter is " +
-                        "treated as fact and used in the title, description and keywords — " +
-                        "buyers search by place. Leave it blank to skip.",
+                    "Context the model cannot see in the photo: where it was taken, what the " +
+                        "subject is, the event it shows. Anything you enter is treated as fact " +
+                        "and used in the title, description and keywords; a place it names also " +
+                        "leads the caption. Leave it blank to skip.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(location) }) { Text("Generate") }
+            TextButton(onClick = { onConfirm(hint) }) { Text("Generate") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
@@ -254,7 +254,6 @@ private fun LocationDialog(
 private fun StatusSummary(
     images: List<ImageEntity>,
     albumName: String,
-    location: String?,
     onSelectUngenerated: () -> Unit,
 ) {
     val generated = images.count { it.state == ImageState.GENERATED }
@@ -271,11 +270,7 @@ private fun StatusSummary(
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                buildString {
-                    append("Album: ")
-                    append(albumName)
-                    if (!location.isNullOrBlank()) append("  ·  ").also { append(location) }
-                },
+                "Album: $albumName",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

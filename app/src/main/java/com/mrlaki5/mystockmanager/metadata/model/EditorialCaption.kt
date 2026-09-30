@@ -57,6 +57,15 @@ object EditorialCaption {
         return Parts(null, text)
     }
 
+    /** The place in a caption's lead, found exactly by cutting off the [body] the row already stores; null when there is none. */
+    fun placeOf(caption: String, body: String, capturedOn: String?): String? {
+        val text = caption.trim()
+        val lead = text.removeSuffix(": ${body.trim()}").takeIf { it != text }?.trim() ?: return null
+        val date = capturedOn?.let(::formatDate)
+        val place = if (date != null && lead == date) "" else if (date != null) lead.removeSuffix("$SEPARATOR$date") else lead
+        return place.trim().ifEmpty { null }
+    }
+
     /** [capturedOn] is an ISO local date; anything unparseable is treated as absent. */
     private fun formatDate(capturedOn: String): String? =
         runCatching { LocalDate.parse(capturedOn).format(MONTH_DAY_YEAR) }.getOrNull()

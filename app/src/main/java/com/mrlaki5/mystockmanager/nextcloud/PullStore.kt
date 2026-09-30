@@ -25,6 +25,7 @@ data class PulledImage(
     val capturedOn: String?,
     val title: String?,
     val description: String?,
+    val captionPlace: String?,
     val keywords: List<String>,
     val category: String?,
 ) {

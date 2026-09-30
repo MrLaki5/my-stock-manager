@@ -168,6 +168,7 @@ class NextcloudPull @Inject constructor(
                 capturedOn = capturedOn,
                 title = inspected.title?.trim()?.ifEmpty { null },
                 description = parts?.body?.ifEmpty { null },
+                captionPlace = parts?.let { it.location.orEmpty() },
                 keywords = inspected.keywords,
                 category = inspected.category?.trim()?.ifEmpty { null },
             )

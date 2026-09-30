@@ -348,8 +348,8 @@ private fun MetadataEditor(
 }
 
 /**
- * The description as it will actually be written. The field above holds the body; the event
- * location and capture date are prepended on save, so showing the assembled result is the
+ * The description as it will actually be written. The field above holds the body; the place
+ * from the generation hint and the capture date are prepended on save, so showing the assembled result is the
  * only way to see what an agency will receive.
  */
 @Composable
@@ -381,10 +381,11 @@ private fun CaptionPreview(caption: String, hasDate: Boolean) {
         }
         Text(
             if (hasDate) {
-                "The event location and the date this photo was taken are prepended to the " +
-                    "description automatically."
+                "The place from the generation hint, if it named one, and the date this " +
+                    "photo was taken are prepended to the description automatically."
             } else {
-                "The event location is prepended to the description automatically. This " +
+                "The place from the generation hint, if it named one, is prepended to the " +
+                    "description automatically. This " +
                     "photo has no capture date in its EXIF, so the date is left out rather " +
                     "than guessed."
             },

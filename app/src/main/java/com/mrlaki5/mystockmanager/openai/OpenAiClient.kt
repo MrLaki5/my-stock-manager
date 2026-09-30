@@ -29,6 +29,8 @@ import java.util.concurrent.TimeUnit
 sealed interface OpenAiResult {
     data class Success(
         val metadata: StockMetadata,
+        /** The place the hint named, for the caption lead; null when it named none. */
+        val place: String?,
         val promptTokens: Int?,
         val completionTokens: Int?,
     ) : OpenAiResult
@@ -46,14 +48,14 @@ class OpenAiClient(
         apiKey: String,
         model: String,
         imageBase64Jpeg: String,
-        location: String? = null,
+        hint: String? = null,
     ): OpenAiResult {
         if (apiKey.isBlank()) return OpenAiResult.Terminal("No API key configured.")
 
         val request = Request.Builder()
             .url(ENDPOINT)
             .addHeader("Authorization", "Bearer $apiKey")
-            .post(buildRequestBody(model, imageBase64Jpeg, location).toString().toRequestBody(JSON_MEDIA))
+            .post(buildRequestBody(model, imageBase64Jpeg, hint).toString().toRequestBody(JSON_MEDIA))
             .build()
 
         val response = try {
@@ -104,6 +106,7 @@ class OpenAiClient(
         val usage = root["usage"]?.jsonObject
         return OpenAiResult.Success(
             metadata = metadata,
+            place = MetadataParser.parsePlace(content, json),
             promptTokens = usage?.get("prompt_tokens")?.jsonPrimitive?.content?.toIntOrNull(),
             completionTokens = usage?.get("completion_tokens")?.jsonPrimitive?.content?.toIntOrNull(),
         )
@@ -112,7 +115,7 @@ class OpenAiClient(
     private fun buildRequestBody(
         model: String,
         imageBase64Jpeg: String,
-        location: String?,
+        hint: String?,
     ): JsonObject =
         buildJsonObject {
             put("model", model)
@@ -131,7 +134,7 @@ class OpenAiClient(
                             add(
                                 buildJsonObject {
                                     put("type", "text")
-                                    put("text", VisionPrompt.user(location))
+                                    put("text", VisionPrompt.user(hint))
                                 }
                             )
                             add(
@@ -164,7 +167,7 @@ class OpenAiClient(
         put("additionalProperties", false)
         putJsonArray("required") {
             add("title"); add("description"); add("keywords")
-            add("shutterstock_category"); add("secondary_category")
+            add("shutterstock_category"); add("secondary_category"); add("place")
         }
         putJsonObject("properties") {
             putJsonObject("title") {
@@ -184,6 +187,9 @@ class OpenAiClient(
                 putJsonArray("enum") { SHUTTERSTOCK_CATEGORIES.forEach { add(it) } }
             }
             putJsonObject("secondary_category") {
+                putJsonArray("type") { add("string"); add("null") }
+            }
+            putJsonObject("place") {
                 putJsonArray("type") { add("string"); add("null") }
             }
         }

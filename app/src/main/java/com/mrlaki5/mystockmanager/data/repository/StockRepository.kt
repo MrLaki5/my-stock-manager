@@ -10,6 +10,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
+import com.mrlaki5.mystockmanager.metadata.MetadataReader
 import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
@@ -66,12 +67,6 @@ class StockRepository @Inject constructor(
     fun observeCloudStatus(imageId: Long): Flow<CloudStatus?> =
         combine(syncDao.observeCloudRow(imageId), nextcloud.enabledOffMain()) { row, enabled -> row?.status(enabled) }
 
-    /**
-     * The event location an image inherits, for a screen that wants to render the caption
-     * as the user types rather than only after saving.
-     */
-    suspend fun locationFor(image: ImageEntity): String? =
-        image.folderId?.let { folderDao.observeById(it).first()?.location }
 
     /**
      * Saves hand-edited metadata, writing it into the album file before the row.
@@ -97,7 +92,7 @@ class StockRepository @Inject constructor(
         val body = metadata.normalized().description
         val captioned = metadata.copy(
             description = EditorialCaption.build(
-                location = image.folderId?.let { folderDao.observeById(it).first()?.location },
+                location = image.captionPlace,
                 capturedOn = image.capturedOn,
                 body = body,
             ),
@@ -198,9 +193,9 @@ class StockRepository @Inject constructor(
 
     suspend fun reorderEvents(orderedIds: List<Long>) = folderDao.reorder(orderedIds)
 
-    /** Remembers the location so the next generation for this event pre-fills it. */
-    suspend fun setEventLocation(id: Long, location: String?) =
-        folderDao.setLocation(id, location?.trim()?.takeIf { it.isNotEmpty() }, System.currentTimeMillis())
+    /** Remembers the hint so the next generation for this event pre-fills it. */
+    suspend fun setEventHint(id: Long, hint: String?) =
+        folderDao.setHint(id, hint?.trim()?.takeIf { it.isNotEmpty() }, System.currentTimeMillis())
 
     fun albumNameFor(eventName: String): String = MediaStoreExporter.albumNameFor(eventName)
 
@@ -221,6 +216,28 @@ class StockRepository @Inject constructor(
                 ?: mediaStore.dateTakenMillis(uri)?.let(CaptureDate::fromEpochMillis)
                 ?: continue
             imageDao.setCapturedOn(image.id, captured)
+        }
+    }
+
+    /** Reads the caption place back from files captioned before it was stored per image. */
+    suspend fun backfillCaptionPlaces() = withContext(Dispatchers.IO) {
+        for (image in imageDao.getWithoutCaptionPlace()) {
+            val uri = image.mediaStoreUri?.toUri() ?: continue
+            val temp = fileStore.newTempFile("place")
+            try {
+                val caption = runCatching {
+                    mediaStore.copyTo(uri, temp)
+                    MetadataReader.read(temp).iptcDescription
+                }.getOrNull()
+                val body = image.description.orEmpty()
+                val place = caption?.let {
+                    EditorialCaption.placeOf(it, body, image.capturedOn)
+                        ?: EditorialCaption.parse(it, image.capturedOn, image.folderId?.let { id -> folderDao.observeById(id).first()?.hint }).location
+                }
+                imageDao.setCaptionPlace(image.id, place.orEmpty())
+            } finally {
+                temp.delete()
+            }
         }
     }
 

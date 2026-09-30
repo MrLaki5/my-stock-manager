@@ -115,6 +115,14 @@ class EditorialCaptionTest {
     }
 
     @Test
+    fun `placeOf reads each image's own place from its caption and stored body`() {
+        assertEquals("Kotor, Montenegro", EditorialCaption.placeOf(EditorialCaption.build("Kotor, Montenegro", "2026-05-23", body), body, "2026-05-23"))
+        assertEquals("Vevey, Switzerland", EditorialCaption.placeOf(EditorialCaption.build("Vevey, Switzerland", null, body), body, null))
+        assertEquals(null, EditorialCaption.placeOf(EditorialCaption.build(null, "2026-05-23", body), body, "2026-05-23"))
+        assertEquals(null, EditorialCaption.placeOf(body, body, null))
+    }
+
+    @Test
     fun `parse leaves a caption it did not write untouched`() {
         val foreign = "Note: shot on film"
         assertEquals(EditorialCaption.Parts(null, foreign), EditorialCaption.parse(foreign, "2026-05-23", "Vevey"))

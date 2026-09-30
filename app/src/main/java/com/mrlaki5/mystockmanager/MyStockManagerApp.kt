@@ -39,6 +39,7 @@ class MyStockManagerApp : Application(), Configuration.Provider {
             runCatching { repository.resetStuckGenerating() }
             runCatching { repository.migrateLegacyPrivateFiles() }
             runCatching { repository.backfillCaptureDates() }
+            runCatching { repository.backfillCaptionPlaces() }
         }
         appScope.launch { syncCoordinator.get().start(appScope) }
     }

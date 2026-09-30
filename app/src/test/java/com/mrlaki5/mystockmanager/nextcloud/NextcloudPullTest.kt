@@ -205,6 +205,8 @@ class NextcloudPullTest {
         run()
         assertEquals("Šabac, Serbia", eventNamed("Trip").location)
         assertEquals("A bridge.", imageNamed("a.jpg").description)
+        assertEquals("Sremska Mitrovica, Serbia", imageNamed("a.jpg").captionPlace)
+        assertEquals("Šabac, Serbia", imageNamed("b.jpg").captionPlace)
     }
 
     @Test

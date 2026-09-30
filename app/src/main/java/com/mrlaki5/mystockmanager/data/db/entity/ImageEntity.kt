@@ -69,6 +69,12 @@ data class ImageEntity(
     /** MediaStore row for the published copy in Pictures/StockReady/<event>/, if any. */
     val mediaStoreUri: String? = null,
     val exportedAt: Long? = null,
+    /**
+     * The place the file's caption leads with, fixed when the caption was generated. Kept per
+     * image because one event's images can be generated with different hints. Empty means
+     * checked and none; null means not yet read back from a file written before this existed.
+     */
+    val captionPlace: String? = null,
     /** Bumped each time the album file is rewritten, so sync knows the cloud copy is stale. */
     @ColumnInfo(defaultValue = "1") val fileVersion: Long = 1,
 )

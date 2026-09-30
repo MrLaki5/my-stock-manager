@@ -23,7 +23,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.SyncImageEntity
         SyncImageEntity::class,
         RemoteDeletionEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -97,6 +97,13 @@ abstract class StockDatabase : RoomDatabase() {
                         "WHERE f2.createdAt > folders.createdAt " +
                         "OR (f2.createdAt = folders.createdAt AND f2.id > folders.id))"
                 )
+            }
+        }
+
+        /** Adds the per-image caption place; existing rows are read back from their files at startup. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE images ADD COLUMN captionPlace TEXT")
             }
         }
     }
