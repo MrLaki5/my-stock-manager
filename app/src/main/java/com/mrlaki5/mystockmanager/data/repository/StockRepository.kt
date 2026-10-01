@@ -100,13 +100,26 @@ class StockRepository @Inject constructor(
 
         return embedder.embed(uri, captioned).map { written ->
             val stored = written.copy(description = body)
-            imageDao.updateMetadata(
-                id = imageId,
-                title = stored.title,
-                description = stored.description,
-                keywords = stored.keywords,
-                category = stored.category,
-            )
+            // A running generation will overwrite the row anyway, so only idle images are promoted.
+            if (image.state == ImageState.FILED || image.state == ImageState.GENERATION_FAILED) {
+                imageDao.saveHandWritten(
+                    id = imageId,
+                    title = stored.title,
+                    description = stored.description,
+                    keywords = stored.keywords,
+                    category = stored.category,
+                    state = ImageState.GENERATED,
+                    writtenAt = System.currentTimeMillis(),
+                )
+            } else {
+                imageDao.updateMetadata(
+                    id = imageId,
+                    title = stored.title,
+                    description = stored.description,
+                    keywords = stored.keywords,
+                    category = stored.category,
+                )
+            }
             stored
         }
     }

@@ -54,9 +54,8 @@ interface ImageDao {
     )
 
     /**
-     * A hand edit. Unlike [saveGenerated] this leaves state, model and generatedAt alone:
-     * the metadata came from the model originally and editing a keyword does not change
-     * which model produced it or when.
+     * A hand edit of existing metadata. Unlike [saveGenerated] this leaves state, model and
+     * generatedAt alone: editing a keyword does not change which model produced it or when.
      */
     @Query(
         """
@@ -72,6 +71,30 @@ interface ImageDao {
         description: String,
         keywords: List<String>,
         category: String?,
+    )
+
+    /**
+     * A first hand write on an image that never got metadata. It now has metadata like a
+     * generated one, so it leaves the Generate queue; model stays null since none produced it.
+     */
+    @Query(
+        """
+        UPDATE images
+        SET title = :title, description = :description, keywords = :keywords,
+            category = :category, state = :state, generatedAt = :writtenAt,
+            captionPlace = COALESCE(captionPlace, ''), generationError = NULL,
+            fileVersion = fileVersion + 1
+        WHERE id = :id
+        """
+    )
+    suspend fun saveHandWritten(
+        id: Long,
+        title: String,
+        description: String,
+        keywords: List<String>,
+        category: String?,
+        state: ImageState,
+        writtenAt: Long,
     )
 
     @Query("UPDATE images SET state = :to WHERE state = :from")

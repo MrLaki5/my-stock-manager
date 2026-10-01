@@ -22,9 +22,10 @@ Shutterstock already carries its metadata.
   pixels are never decoded or re-encoded.
 - **Verifies every write.** The embedded copy is read back and compared before the album
   file is overwritten, so a failed embed can never damage an image you already have.
-- **Lets you correct anything** - open an image to edit its title, description or category,
-  and rename, reorder or remove an individual keyword. Saving rewrites the JPEG, not just
-  the database.
+- **Lets you write or correct anything by hand** - open an image to edit its title,
+  description or category, and rename, reorder or remove an individual keyword. An image with
+  no metadata yet gets the same editor, so you can write it yourself instead of generating it.
+  Saving rewrites the JPEG, not just the database.
 - **Runs generation in the background**, one worker per image, so one failure retries on its
   own without holding up the batch.
 - **Optionally syncs every event to NextCloud** - one folder per event under a path you
@@ -50,9 +51,9 @@ together. You pick the images and submit them yourself. The title, description a
 already embedded in each file, so it works like uploading photos you keyworded in Lightroom or
 Bridge.
 
-The photos are never generated or altered. A model only drafts the text, and you can edit every
-field before it is written. It is still up to you to check that the text describes each image
-accurately.
+The photos are never generated or altered. A model only drafts the text, or you write it
+yourself, and you can edit every field before it is written. It is still up to you to check
+that the text describes each image accurately.
 
 ## Keyword limits
 
@@ -61,8 +62,9 @@ Adobe Stock caps keywords at 49, Shutterstock at 50 with a minimum of 7. The app
 
 ## Build
 
-Requires an OpenAI API key, entered in Settings - none is bundled. Model is selectable
-between `gpt-4o-mini` (default) and `gpt-4o`.
+Generation requires an OpenAI API key, entered in Settings - none is bundled. Without one,
+everything else works and metadata can be written by hand. Model is selectable between
+`gpt-4o-mini` (default) and `gpt-4o`.
 
 ```bash
 ./gradlew installDebug

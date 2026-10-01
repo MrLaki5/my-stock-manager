@@ -217,16 +217,12 @@ fun ImageDetailScreen(
 
             HorizontalDivider()
 
-            val editable = draft
-            when {
-                // Nothing has been generated, so there is nothing to edit. Writing
-                // metadata by hand from scratch is a different feature from correcting
-                // what the model produced.
-                current.title == null -> NoMetadata(
-                    Modifier.fillMaxWidth().padding(16.dp, 24.dp),
-                )
+            if (current.title == null) {
+                NoMetadataHint(Modifier.fillMaxWidth().padding(16.dp).padding(top = 8.dp))
+            }
 
-                editable != null -> MetadataEditor(
+            draft?.let { editable ->
+                MetadataEditor(
                     draft = editable,
                     caption = caption,
                     capturedOn = current.capturedOn,
@@ -559,12 +555,11 @@ private fun SaveBar(canSave: Boolean, onDiscard: () -> Unit, onSave: () -> Unit)
 }
 
 @Composable
-private fun NoMetadata(modifier: Modifier = Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun NoMetadataHint(modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("No metadata yet", style = MaterialTheme.typography.titleMedium)
         Text(
-            "Select this image in the event and tap Generate metadata. Once it has a " +
-                "title, description and keywords you can correct any of them here.",
+            "Write it below, or select this image in the event and tap Generate metadata.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

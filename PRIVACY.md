@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **MyStockManager**, Android app
-Effective date: 30 September 2026
+Effective date: 1 October 2026
 
 MyStockManager helps you prepare your own photos for stock agencies by writing a title,
 description and keywords into each file. This policy explains what data the app handles,
@@ -12,6 +12,7 @@ where that data goes, and how to delete it.
 - The developer does not collect, receive or store any of your data. The app has no
   developer servers, no analytics, no advertising and no account.
 - The app sends a photo to OpenAI only when you choose that photo and tap Generate.
+  Metadata you write by hand is never sent to OpenAI.
 - If you turn on sync, the app uploads your photos to the NextCloud server you set up.
 - Your OpenAI API key and NextCloud app password are stored encrypted on your device.
 
@@ -33,6 +34,9 @@ such as a place or subject, is sent along with the image.
 These requests are made with your own OpenAI API key, directly from your device to OpenAI.
 The developer never sees them. OpenAI's handling of this data is covered by its own terms
 and privacy policy: <https://openai.com/policies/privacy-policy>.
+
+Generating is optional. You can write an image's title, description and keywords yourself
+instead. When you do, nothing about that image is sent to OpenAI.
 
 ### Photos and metadata synced to NextCloud (optional)
 
