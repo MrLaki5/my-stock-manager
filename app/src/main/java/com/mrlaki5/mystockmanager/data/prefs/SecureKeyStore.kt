@@ -3,6 +3,9 @@ package com.mrlaki5.mystockmanager.data.prefs
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.mrlaki5.mystockmanager.openai.OpenAiModel
+import com.mrlaki5.mystockmanager.openai.OpenAiModels
+import com.mrlaki5.mystockmanager.openai.ReasoningEffort
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
@@ -31,9 +34,13 @@ class SecureKeyStore(context: Context) {
         get() = prefs.getString(KEY_OPENAI, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_OPENAI, value.trim()).apply()
 
-    var model: String
-        get() = prefs.getString(KEY_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL
-        set(value) = prefs.edit().putString(KEY_MODEL, value).apply()
+    var model: OpenAiModel
+        get() = OpenAiModels.byId(prefs.getString(KEY_MODEL, null).orEmpty())
+        set(value) = prefs.edit().putString(KEY_MODEL, value.id).apply()
+
+    var reasoningEffort: ReasoningEffort
+        get() = ReasoningEffort.of(prefs.getString(KEY_REASONING_EFFORT, null).orEmpty())
+        set(value) = prefs.edit().putString(KEY_REASONING_EFFORT, value.apiValue).apply()
 
     val hasApiKey: Boolean get() = apiKey.isNotBlank()
 
@@ -77,10 +84,10 @@ class SecureKeyStore(context: Context) {
     }
 
     companion object {
-        const val DEFAULT_MODEL = "gpt-4o-mini"
         private const val PREFS_NAME = "stock_secure_prefs"
         private const val KEY_OPENAI = "openai_api_key"
         private const val KEY_MODEL = "openai_model"
+        private const val KEY_REASONING_EFFORT = "openai_reasoning_effort"
         private const val KEY_SYSTEM_PROMPT = "openai_system_prompt"
         private const val KEY_NC_SERVER = "nextcloud_server"
         private const val KEY_NC_LOGIN = "nextcloud_login"

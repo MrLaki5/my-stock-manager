@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mrlaki5.mystockmanager.openai.OpenAiModels
 import com.mrlaki5.mystockmanager.openai.VisionPrompt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,6 +57,7 @@ fun SettingsScreen(
 ) {
     val apiKey by viewModel.apiKey.collectAsStateWithLifecycle()
     val model by viewModel.model.collectAsStateWithLifecycle()
+    val reasoningEffort by viewModel.reasoningEffort.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -120,11 +122,23 @@ fun SettingsScreen(
                     FilterChip(
                         selected = candidate == model,
                         onClick = { viewModel.setModel(candidate) },
-                        label = { Text(candidate) },
+                        label = { Text(candidate.id) },
                     )
                 }
             }
-            Hint("gpt-4o-mini is much cheaper per image; gpt-4o tends to produce stronger keywords.")
+            Hint("${OpenAiModels.LUNA.id} is much cheaper per image; ${OpenAiModels.SOL.id} tends to produce stronger keywords.")
+
+            Text("Reasoning", style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                model.efforts.forEach { effort ->
+                    FilterChip(
+                        selected = effort == reasoningEffort,
+                        onClick = { viewModel.setReasoningEffort(effort) },
+                        label = { Text(effort.label) },
+                    )
+                }
+            }
+            Hint("Higher reasoning can improve results but costs more and takes longer.")
 
             PromptSection(viewModel)
 

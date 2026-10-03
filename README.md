@@ -72,7 +72,7 @@ Adobe Stock caps keywords at 49, Shutterstock at 50 with a minimum of 7. The app
 
 Generation requires an OpenAI API key, entered in Settings - none is bundled. Without one,
 everything else works and metadata can be written by hand. Model is selectable between
-`gpt-4o-mini` (default) and `gpt-4o`.
+`gpt-6-luna` (default) and `gpt-6.1-sol`, with a reasoning effort level.
 
 ```bash
 ./gradlew installDebug

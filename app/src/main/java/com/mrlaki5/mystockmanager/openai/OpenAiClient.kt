@@ -47,6 +47,7 @@ class OpenAiClient(
     fun generate(
         apiKey: String,
         model: String,
+        reasoningEffort: ReasoningEffort,
         imageBase64Jpeg: String,
         hint: String? = null,
         systemPrompt: String = VisionPrompt.DEFAULT_SYSTEM,
@@ -56,7 +57,7 @@ class OpenAiClient(
         val request = Request.Builder()
             .url(ENDPOINT)
             .addHeader("Authorization", "Bearer $apiKey")
-            .post(buildRequestBody(model, imageBase64Jpeg, hint, systemPrompt).toString().toRequestBody(JSON_MEDIA))
+            .post(buildRequestBody(model, reasoningEffort, imageBase64Jpeg, hint, systemPrompt).toString().toRequestBody(JSON_MEDIA))
             .build()
 
         val response = try {
@@ -115,13 +116,15 @@ class OpenAiClient(
 
     private fun buildRequestBody(
         model: String,
+        reasoningEffort: ReasoningEffort,
         imageBase64Jpeg: String,
         hint: String?,
         systemPrompt: String,
     ): JsonObject =
         buildJsonObject {
             put("model", model)
-            put("temperature", 0.4)
+            // GPT-6 models are reasoning models: they take an effort level instead of a temperature.
+            put("reasoning_effort", reasoningEffort.apiValue)
             putJsonArray("messages") {
                 add(
                     buildJsonObject {

@@ -8,6 +8,9 @@ import com.mrlaki5.mystockmanager.nextcloud.NextcloudAccount
 import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
 import com.mrlaki5.mystockmanager.nextcloud.PullState
 import com.mrlaki5.mystockmanager.nextcloud.SyncCoordinator
+import com.mrlaki5.mystockmanager.openai.OpenAiModel
+import com.mrlaki5.mystockmanager.openai.OpenAiModels
+import com.mrlaki5.mystockmanager.openai.ReasoningEffort
 import com.mrlaki5.mystockmanager.openai.VisionPrompt
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,9 +54,16 @@ class SettingsViewModel @Inject constructor(
     val apiKey: StateFlow<String> = _apiKey.asStateFlow()
 
     private val _model = MutableStateFlow(keyStore.model)
-    val model: StateFlow<String> = _model.asStateFlow()
+    val model: StateFlow<OpenAiModel> = _model.asStateFlow()
 
-    val availableModels = listOf("gpt-4o-mini", "gpt-4o")
+    val availableModels = OpenAiModels.ALL
+
+    private val _reasoningEffort = MutableStateFlow(keyStore.reasoningEffort)
+
+    /** What the next generation will actually send, after clamping to the model's supported levels. */
+    val reasoningEffort: StateFlow<ReasoningEffort> = combine(_model, _reasoningEffort) { model, effort ->
+        model.effective(effort)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, keyStore.model.effective(keyStore.reasoningEffort))
 
     private val _systemPrompt = MutableStateFlow(keyStore.systemPrompt.ifBlank { VisionPrompt.DEFAULT_SYSTEM })
     val systemPrompt: StateFlow<String> = _systemPrompt.asStateFlow()
@@ -106,9 +116,14 @@ class SettingsViewModel @Inject constructor(
         keyStore.apiKey = value
     }
 
-    fun setModel(value: String) {
+    fun setModel(value: OpenAiModel) {
         _model.value = value
         keyStore.model = value
+    }
+
+    fun setReasoningEffort(value: ReasoningEffort) {
+        _reasoningEffort.value = value
+        keyStore.reasoningEffort = value
     }
 
     fun setSystemPrompt(value: String) {
