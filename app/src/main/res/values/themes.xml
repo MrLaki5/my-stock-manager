@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.MyStockManager" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Platform.Theme.MyStockManager" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Bar colors live here, not in code: Window.setStatusBarColor/setNavigationBarColor are deprecated on API 35 and flagged by Play. -->
+    <style name="Base.Theme.MyStockManager" parent="Platform.Theme.MyStockManager">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <style name="Theme.MyStockManager" parent="Base.Theme.MyStockManager" />
 </resources>

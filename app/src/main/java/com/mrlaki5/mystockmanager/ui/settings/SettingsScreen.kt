@@ -133,7 +133,11 @@ fun SettingsScreen(
             NextcloudSection(viewModel)
 
             HorizontalDivider()
-            TextButton(onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) }) { Text("Privacy policy") }
+            Hint("MyStockManager is open source under the MIT license.")
+            Row {
+                TextButton(onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) }) { Text("Privacy policy") }
+                TextButton(onClick = { uriHandler.openUri(SOURCE_CODE_URL) }) { Text("Source code") }
+            }
         }
     }
 }
@@ -146,6 +150,8 @@ private const val NEXTCLOUD_APP_PASSWORD_HELP_URL =
 
 private const val PRIVACY_POLICY_URL =
     "https://github.com/MrLaki5/my-stock-manager/blob/main/PRIVACY.md"
+
+private const val SOURCE_CODE_URL = "https://github.com/MrLaki5/my-stock-manager"
 
 @Composable
 private fun PromptSection(viewModel: SettingsViewModel) {
