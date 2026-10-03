@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -45,6 +46,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mrlaki5.mystockmanager.openai.OpenAiModels
+import com.mrlaki5.mystockmanager.openai.VisionPrompt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +57,7 @@ fun SettingsScreen(
 ) {
     val apiKey by viewModel.apiKey.collectAsStateWithLifecycle()
     val model by viewModel.model.collectAsStateWithLifecycle()
+    val reasoningEffort by viewModel.reasoningEffort.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -86,7 +90,8 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("OpenAI", style = MaterialTheme.typography.titleMedium)
+            val uriHandler = LocalUriHandler.current
+            SectionTitle("OpenAI", OPENAI_API_KEY_HELP_URL, "How to get an OpenAI API key")
             OutlinedTextField(
                 value = apiKey,
                 onValueChange = viewModel::setApiKey,
@@ -104,24 +109,98 @@ fun SettingsScreen(
                     FilterChip(
                         selected = candidate == model,
                         onClick = { viewModel.setModel(candidate) },
-                        label = { Text(candidate) },
+                        label = { Text(candidate.id) },
                     )
                 }
             }
-            Hint("gpt-4o-mini is much cheaper per image; gpt-4o tends to produce stronger keywords.")
+            Hint("${OpenAiModels.LUNA.id} is much cheaper per image; ${OpenAiModels.SOL.id} tends to produce stronger keywords.")
+
+            Text("Reasoning", style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                model.efforts.forEach { effort ->
+                    FilterChip(
+                        selected = effort == reasoningEffort,
+                        onClick = { viewModel.setReasoningEffort(effort) },
+                        label = { Text(effort.label) },
+                    )
+                }
+            }
+            Hint("Higher reasoning can improve results but costs more and takes longer.")
+
+            PromptSection(viewModel)
 
             HorizontalDivider()
             NextcloudSection(viewModel)
 
             HorizontalDivider()
-            val uriHandler = LocalUriHandler.current
             TextButton(onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) }) { Text("Privacy policy") }
         }
     }
 }
 
+private const val OPENAI_API_KEY_HELP_URL =
+    "https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key"
+
+private const val NEXTCLOUD_APP_PASSWORD_HELP_URL =
+    "https://docs.nextcloud.com/server/latest/user_manual/en/session_management.html"
+
 private const val PRIVACY_POLICY_URL =
     "https://github.com/MrLaki5/my-stock-manager/blob/main/PRIVACY.md"
+
+@Composable
+private fun PromptSection(viewModel: SettingsViewModel) {
+    val prompt by viewModel.systemPrompt.collectAsStateWithLifecycle()
+    var editing by remember { mutableStateOf(false) }
+    var confirmingReset by remember { mutableStateOf(false) }
+
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { editing = true }) { Text("Edit system prompt") }
+        TextButton(
+            onClick = { confirmingReset = true },
+            enabled = prompt != VisionPrompt.DEFAULT_SYSTEM,
+        ) { Text("Reset to default") }
+    }
+    Hint("Customize how titles, descriptions and keywords are written.")
+
+    if (editing) {
+        var draft by remember { mutableStateOf(prompt) }
+        AlertDialog(
+            onDismissRequest = { editing = false },
+            title = { Text("System prompt") },
+            text = {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    minLines = 8,
+                    maxLines = 14,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    editing = false
+                    viewModel.setSystemPrompt(draft)
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (confirmingReset) {
+        AlertDialog(
+            onDismissRequest = { confirmingReset = false },
+            title = { Text("Reset prompt?") },
+            text = { Text("Your custom prompt will be replaced with the built-in one.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingReset = false
+                    viewModel.resetSystemPrompt()
+                }) { Text("Reset") }
+            },
+            dismissButton = { TextButton(onClick = { confirmingReset = false }) { Text("Cancel") } },
+        )
+    }
+}
 
 @Composable
 private fun NextcloudSection(viewModel: SettingsViewModel) {
@@ -135,7 +214,7 @@ private fun NextcloudSection(viewModel: SettingsViewModel) {
     val pulling by viewModel.pulling.collectAsStateWithLifecycle()
     var confirmingPull by remember { mutableStateOf(false) }
 
-    Text("NextCloud sync (optional)", style = MaterialTheme.typography.titleMedium)
+    SectionTitle("NextCloud sync (optional)", NEXTCLOUD_APP_PASSWORD_HELP_URL, "How to create a NextCloud app password")
     OutlinedTextField(
         value = draft.server,
         onValueChange = viewModel::setServer,
@@ -227,6 +306,22 @@ private fun NextcloudSection(viewModel: SettingsViewModel) {
             },
             dismissButton = { TextButton(onClick = { confirmingPull = false }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, helpUrl: String, helpDescription: String) {
+    val uriHandler = LocalUriHandler.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        IconButton(onClick = { uriHandler.openUri(helpUrl) }, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.AutoMirrored.Outlined.HelpOutline,
+                contentDescription = helpDescription,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

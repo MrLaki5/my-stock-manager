@@ -12,6 +12,7 @@ import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
 import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.openai.OpenAiClient
 import com.mrlaki5.mystockmanager.openai.OpenAiResult
+import com.mrlaki5.mystockmanager.openai.VisionPrompt
 import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.ImageEncoder
 import com.mrlaki5.mystockmanager.storage.MediaStoreExporter
@@ -58,6 +59,8 @@ class GenerateMetadataWorker @AssistedInject constructor(
         val apiKey = keyStore.apiKey
         if (apiKey.isBlank()) return fail(imageId, "No OpenAI API key set. Add one in Settings.")
         val model = keyStore.model
+        val effort = model.effective(keyStore.reasoningEffort)
+        val systemPrompt = keyStore.systemPrompt.ifBlank { VisionPrompt.DEFAULT_SYSTEM }
 
         val source = fileStore.newTempFile("gen-src")
         try {
@@ -67,7 +70,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
             val encoded = runCatching { ImageEncoder.toBase64Jpeg(source) }
                 .getOrElse { return fail(imageId, "Could not decode image: ${it.message}") }
 
-            return when (val result = openAiClient.generate(apiKey, model, encoded, hint)) {
+            return when (val result = openAiClient.generate(apiKey, model.id, effort, encoded, hint, systemPrompt)) {
                 is OpenAiResult.Transient -> {
                     // Stays GENERATING: a retry really is still in flight.
                     imageDao.markFailed(imageId, ImageState.GENERATING, result.message)
@@ -107,7 +110,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
                         category = written.category,
                         state = ImageState.GENERATED,
                         generatedAt = now,
-                        model = model,
+                        model = model.id,
                         captionPlace = result.place.orEmpty(),
                     )
                     imageDao.markExported(imageId, image.mediaStoreUri, now)
