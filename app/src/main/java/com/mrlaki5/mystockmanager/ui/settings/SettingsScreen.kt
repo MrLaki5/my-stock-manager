@@ -91,8 +91,16 @@ fun SettingsScreen(
             val uriHandler = LocalUriHandler.current
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("OpenAI", style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { uriHandler.openUri(OPENAI_API_KEY_HELP_URL) }) {
-                    Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "How to get an OpenAI API key")
+                IconButton(
+                    onClick = { uriHandler.openUri(OPENAI_API_KEY_HELP_URL) },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.HelpOutline,
+                        contentDescription = "How to get an OpenAI API key",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             OutlinedTextField(
