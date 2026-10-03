@@ -8,6 +8,7 @@ import com.mrlaki5.mystockmanager.nextcloud.NextcloudAccount
 import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
 import com.mrlaki5.mystockmanager.nextcloud.PullState
 import com.mrlaki5.mystockmanager.nextcloud.SyncCoordinator
+import com.mrlaki5.mystockmanager.openai.VisionPrompt
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -53,6 +54,9 @@ class SettingsViewModel @Inject constructor(
     val model: StateFlow<String> = _model.asStateFlow()
 
     val availableModels = listOf("gpt-4o-mini", "gpt-4o")
+
+    private val _systemPrompt = MutableStateFlow(keyStore.systemPrompt.ifBlank { VisionPrompt.DEFAULT_SYSTEM })
+    val systemPrompt: StateFlow<String> = _systemPrompt.asStateFlow()
 
     private val _saved = MutableStateFlow(AccountDraft.of(nextcloud.account))
 
@@ -106,6 +110,13 @@ class SettingsViewModel @Inject constructor(
         _model.value = value
         keyStore.model = value
     }
+
+    fun setSystemPrompt(value: String) {
+        _systemPrompt.value = value.ifBlank { VisionPrompt.DEFAULT_SYSTEM }
+        keyStore.systemPrompt = if (value.isBlank() || value == VisionPrompt.DEFAULT_SYSTEM) "" else value
+    }
+
+    fun resetSystemPrompt() = setSystemPrompt(VisionPrompt.DEFAULT_SYSTEM)
 
     fun setServer(value: String) = edit { it.copy(server = value) }
 

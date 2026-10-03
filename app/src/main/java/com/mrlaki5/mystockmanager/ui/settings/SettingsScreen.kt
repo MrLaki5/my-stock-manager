@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mrlaki5.mystockmanager.openai.VisionPrompt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -110,6 +111,8 @@ fun SettingsScreen(
             }
             Hint("gpt-4o-mini is much cheaper per image; gpt-4o tends to produce stronger keywords.")
 
+            PromptSection(viewModel)
+
             HorizontalDivider()
             NextcloudSection(viewModel)
 
@@ -122,6 +125,61 @@ fun SettingsScreen(
 
 private const val PRIVACY_POLICY_URL =
     "https://github.com/MrLaki5/my-stock-manager/blob/main/PRIVACY.md"
+
+@Composable
+private fun PromptSection(viewModel: SettingsViewModel) {
+    val prompt by viewModel.systemPrompt.collectAsStateWithLifecycle()
+    var editing by remember { mutableStateOf(false) }
+    var confirmingReset by remember { mutableStateOf(false) }
+
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { editing = true }) { Text("Edit system prompt") }
+        TextButton(
+            onClick = { confirmingReset = true },
+            enabled = prompt != VisionPrompt.DEFAULT_SYSTEM,
+        ) { Text("Reset to default") }
+    }
+    Hint("Customize how titles, descriptions and keywords are written.")
+
+    if (editing) {
+        var draft by remember { mutableStateOf(prompt) }
+        AlertDialog(
+            onDismissRequest = { editing = false },
+            title = { Text("System prompt") },
+            text = {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    minLines = 8,
+                    maxLines = 14,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    editing = false
+                    viewModel.setSystemPrompt(draft)
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { editing = false }) { Text("Cancel") } },
+        )
+    }
+
+    if (confirmingReset) {
+        AlertDialog(
+            onDismissRequest = { confirmingReset = false },
+            title = { Text("Reset prompt?") },
+            text = { Text("Your custom prompt will be replaced with the built-in one.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingReset = false
+                    viewModel.resetSystemPrompt()
+                }) { Text("Reset") }
+            },
+            dismissButton = { TextButton(onClick = { confirmingReset = false }) { Text("Cancel") } },
+        )
+    }
+}
 
 @Composable
 private fun NextcloudSection(viewModel: SettingsViewModel) {

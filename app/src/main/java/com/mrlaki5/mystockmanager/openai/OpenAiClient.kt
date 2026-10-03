@@ -49,13 +49,14 @@ class OpenAiClient(
         model: String,
         imageBase64Jpeg: String,
         hint: String? = null,
+        systemPrompt: String = VisionPrompt.DEFAULT_SYSTEM,
     ): OpenAiResult {
         if (apiKey.isBlank()) return OpenAiResult.Terminal("No API key configured.")
 
         val request = Request.Builder()
             .url(ENDPOINT)
             .addHeader("Authorization", "Bearer $apiKey")
-            .post(buildRequestBody(model, imageBase64Jpeg, hint).toString().toRequestBody(JSON_MEDIA))
+            .post(buildRequestBody(model, imageBase64Jpeg, hint, systemPrompt).toString().toRequestBody(JSON_MEDIA))
             .build()
 
         val response = try {
@@ -116,6 +117,7 @@ class OpenAiClient(
         model: String,
         imageBase64Jpeg: String,
         hint: String?,
+        systemPrompt: String,
     ): JsonObject =
         buildJsonObject {
             put("model", model)
@@ -124,7 +126,7 @@ class OpenAiClient(
                 add(
                     buildJsonObject {
                         put("role", "system")
-                        put("content", VisionPrompt.SYSTEM)
+                        put("content", systemPrompt)
                     }
                 )
                 add(

@@ -14,18 +14,32 @@ val SHUTTERSTOCK_CATEGORIES = listOf(
     "Sports/Recreation", "Technology", "Transportation", "Vintage",
 )
 
+// Unwraps source-code line breaks so the prompt reflows in the settings text field.
+private val SOURCE_LINE_WRAP = Regex("(?<!\n)\n(?!\n)")
+
 object VisionPrompt {
 
-    val SYSTEM = """
+    /** The user-editable part: style rules for each field. App-owned rules stay in [user]. */
+    val DEFAULT_SYSTEM = """
         You write metadata for stock photography submissions to Adobe Stock and Shutterstock.
         You are given one photograph. Describe only what is actually visible; never invent
         brands, names, or events you cannot see.
 
-        The photographer may add a hint: context you cannot get from the pixels, such as where
-        the photo was taken, what the subject is, or what event it shows. Treat the hint as
-        fact even if you cannot recognise it, and do not contradict it — but do not infer any
-        further places, names or events beyond what it states and what you can actually see.
-    """.trimIndent()
+        Title: a marketable, descriptive title of at most $IPTC_OBJECT_NAME_MAX characters.
+        No keyword stuffing, no camera settings, no filename-style text.
+
+        Description: the body of an editorial caption, one or two sentences, stating plainly
+        what is happening and what is visible. Factual rather than marketing copy: no
+        "stunning", no "breathtaking".
+
+        Keywords: between $MIN_KEYWORDS and $MAX_KEYWORDS keywords, ordered by relevance with the
+        most important first. Both agencies weight leading keywords most heavily, so the first
+        ten must be the terms a buyer would actually search for. Include a mix of literal subject
+        terms, setting, and conceptual/emotional terms. Single words or short phrases, lowercase,
+        no duplicates, no punctuation.
+
+        Category: choose the single best Shutterstock category, and optionally a secondary one.
+    """.trimIndent().replace(SOURCE_LINE_WRAP, " ")
 
     fun user(hint: String? = null): String = buildString {
         appendLine(BASE)
@@ -34,7 +48,8 @@ object VisionPrompt {
             appendLine("There is no hint from the photographer. Set place to null.")
         } else {
             appendLine(
-                "The photographer's hint: $hint. Treat it as fact and use what it says in the " +
+                "The photographer's hint: $hint. Treat it as fact even if you cannot recognise " +
+                    "it, and do not contradict it. Use what it says in the " +
                     "title, description and keywords where it reads naturally — buyers search " +
                     "for the specific subject, event and place, so include those and their " +
                     "sensible broader terms (for example city, region, country) among the " +
@@ -51,26 +66,12 @@ object VisionPrompt {
         }
     }
 
+    // Kept out of DEFAULT_SYSTEM so a custom prompt cannot break the app's caption format.
     private val BASE = """
         Produce submission metadata for this image.
-
-        Title: a marketable, descriptive title of at most $IPTC_OBJECT_NAME_MAX characters.
-        No keyword stuffing, no camera settings, no filename-style text.
-
-        Description: the body of an editorial caption, one or two sentences, stating plainly
-        what is happening and what is visible. Factual rather than marketing copy: no
-        "stunning", no "breathtaking".
 
         Do not open the description with the place name or the date. The app prepends those
         itself in the agency's caption format, and a caption that repeats them reads as a
         stutter.
-
-        Keywords: between $MIN_KEYWORDS and $MAX_KEYWORDS keywords, ordered by relevance with the
-        most important first. Both agencies weight leading keywords most heavily, so the first
-        ten must be the terms a buyer would actually search for. Include a mix of literal subject
-        terms, setting, and conceptual/emotional terms. Single words or short phrases, lowercase,
-        no duplicates, no punctuation.
-
-        Category: choose the single best Shutterstock category, and optionally a secondary one.
     """.trimIndent()
 }

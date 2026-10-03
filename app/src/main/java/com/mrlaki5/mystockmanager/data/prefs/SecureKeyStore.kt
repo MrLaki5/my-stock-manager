@@ -37,6 +37,9 @@ class SecureKeyStore(context: Context) {
 
     val hasApiKey: Boolean get() = apiKey.isNotBlank()
 
+    /** Blank means the built-in default, so prompt improvements still reach users who never edited it. */
+    var systemPrompt: String by string(KEY_SYSTEM_PROMPT)
+
     // The NextCloud app password lives here for the same reasons as the OpenAI key.
     var nextcloudServer: String by string(KEY_NC_SERVER)
     var nextcloudLogin: String by string(KEY_NC_LOGIN)
@@ -78,6 +81,7 @@ class SecureKeyStore(context: Context) {
         private const val PREFS_NAME = "stock_secure_prefs"
         private const val KEY_OPENAI = "openai_api_key"
         private const val KEY_MODEL = "openai_model"
+        private const val KEY_SYSTEM_PROMPT = "openai_system_prompt"
         private const val KEY_NC_SERVER = "nextcloud_server"
         private const val KEY_NC_LOGIN = "nextcloud_login"
         private const val KEY_NC_PASSWORD = "nextcloud_app_password"
