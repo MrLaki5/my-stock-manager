@@ -91,20 +91,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val uriHandler = LocalUriHandler.current
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("OpenAI", style = MaterialTheme.typography.titleMedium)
-                IconButton(
-                    onClick = { uriHandler.openUri(OPENAI_API_KEY_HELP_URL) },
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Outlined.HelpOutline,
-                        contentDescription = "How to get an OpenAI API key",
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            SectionTitle("OpenAI", OPENAI_API_KEY_HELP_URL, "How to get an OpenAI API key")
             OutlinedTextField(
                 value = apiKey,
                 onValueChange = viewModel::setApiKey,
@@ -153,6 +140,9 @@ fun SettingsScreen(
 
 private const val OPENAI_API_KEY_HELP_URL =
     "https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key"
+
+private const val NEXTCLOUD_APP_PASSWORD_HELP_URL =
+    "https://docs.nextcloud.com/server/latest/user_manual/en/session_management.html"
 
 private const val PRIVACY_POLICY_URL =
     "https://github.com/MrLaki5/my-stock-manager/blob/main/PRIVACY.md"
@@ -224,7 +214,7 @@ private fun NextcloudSection(viewModel: SettingsViewModel) {
     val pulling by viewModel.pulling.collectAsStateWithLifecycle()
     var confirmingPull by remember { mutableStateOf(false) }
 
-    Text("NextCloud sync (optional)", style = MaterialTheme.typography.titleMedium)
+    SectionTitle("NextCloud sync (optional)", NEXTCLOUD_APP_PASSWORD_HELP_URL, "How to create a NextCloud app password")
     OutlinedTextField(
         value = draft.server,
         onValueChange = viewModel::setServer,
@@ -316,6 +306,22 @@ private fun NextcloudSection(viewModel: SettingsViewModel) {
             },
             dismissButton = { TextButton(onClick = { confirmingPull = false }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, helpUrl: String, helpDescription: String) {
+    val uriHandler = LocalUriHandler.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        IconButton(onClick = { uriHandler.openUri(helpUrl) }, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.AutoMirrored.Outlined.HelpOutline,
+                contentDescription = helpDescription,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
