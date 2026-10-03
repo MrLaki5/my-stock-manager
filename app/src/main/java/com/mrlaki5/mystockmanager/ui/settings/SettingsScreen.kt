@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -87,7 +88,13 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("OpenAI", style = MaterialTheme.typography.titleMedium)
+            val uriHandler = LocalUriHandler.current
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("OpenAI", style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = { uriHandler.openUri(OPENAI_API_KEY_HELP_URL) }) {
+                    Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "How to get an OpenAI API key")
+                }
+            }
             OutlinedTextField(
                 value = apiKey,
                 onValueChange = viewModel::setApiKey,
@@ -117,11 +124,13 @@ fun SettingsScreen(
             NextcloudSection(viewModel)
 
             HorizontalDivider()
-            val uriHandler = LocalUriHandler.current
             TextButton(onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) }) { Text("Privacy policy") }
         }
     }
 }
+
+private const val OPENAI_API_KEY_HELP_URL =
+    "https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key"
 
 private const val PRIVACY_POLICY_URL =
     "https://github.com/MrLaki5/my-stock-manager/blob/main/PRIVACY.md"
