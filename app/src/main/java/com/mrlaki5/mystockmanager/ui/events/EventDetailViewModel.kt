@@ -11,6 +11,7 @@ import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
 import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
+import com.mrlaki5.mystockmanager.work.NetworkStatus
 import com.mrlaki5.mystockmanager.work.WorkScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,7 @@ class EventDetailViewModel @Inject constructor(
     private val repository: StockRepository,
     private val workScheduler: WorkScheduler,
     private val keyStore: SecureKeyStore,
+    private val networkStatus: NetworkStatus,
     nextcloud: NextcloudSettings,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -108,6 +110,10 @@ class EventDetailViewModel @Inject constructor(
         if (ids.isEmpty()) return
         if (!keyStore.hasApiKey) {
             _message.value = "Add your OpenAI API key in Settings first."
+            return
+        }
+        if (!networkStatus.isOnline()) {
+            _message.value = "No internet connection. Connect and try again."
             return
         }
         val trimmed = hint?.trim()?.takeIf { it.isNotEmpty() }

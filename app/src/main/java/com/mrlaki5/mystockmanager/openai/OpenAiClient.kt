@@ -19,6 +19,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -36,12 +39,15 @@ sealed interface OpenAiResult {
     ) : OpenAiResult
 
     data class Transient(val message: String, val retryAfterSeconds: Long?) : OpenAiResult
-    data class Terminal(val message: String) : OpenAiResult
+
+    /** [stopsBatch] marks account-wide failures (no credits, bad key) every queued image would hit too. */
+    data class Terminal(val message: String, val stopsBatch: Boolean = false) : OpenAiResult
 }
 
 class OpenAiClient(
     private val client: OkHttpClient = defaultClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
+    private val endpoint: String = ENDPOINT,
 ) {
 
     fun generate(
@@ -52,10 +58,10 @@ class OpenAiClient(
         hint: String? = null,
         systemPrompt: String = VisionPrompt.DEFAULT_SYSTEM,
     ): OpenAiResult {
-        if (apiKey.isBlank()) return OpenAiResult.Terminal("No API key configured.")
+        if (apiKey.isBlank()) return OpenAiResult.Terminal("No OpenAI API key set. Add one in Settings.", stopsBatch = true)
 
         val request = Request.Builder()
-            .url(ENDPOINT)
+            .url(endpoint)
             .addHeader("Authorization", "Bearer $apiKey")
             .post(buildRequestBody(model, reasoningEffort, imageBase64Jpeg, hint, systemPrompt).toString().toRequestBody(JSON_MEDIA))
             .build()
@@ -63,28 +69,49 @@ class OpenAiClient(
         val response = try {
             client.newCall(request).execute()
         } catch (e: IOException) {
-            return OpenAiResult.Transient("Network error: ${e.message}", null)
+            return OpenAiResult.Transient(networkMessage(e), null)
         }
 
         response.use {
-            val body = it.body?.string().orEmpty()
-            if (!it.isSuccessful) return errorFor(it.code, it.header("Retry-After"), body)
+            val body = try {
+                it.body.string()
+            } catch (e: IOException) {
+                return OpenAiResult.Transient(networkMessage(e), null)
+            }
+            if (!it.isSuccessful) return errorFor(model, it.code, it.header("Retry-After"), body)
             return parseSuccess(body)
         }
     }
 
-    private fun errorFor(code: Int, retryAfter: String?, body: String): OpenAiResult {
-        val detail = runCatching {
-            json.parseToJsonElement(body).jsonObject["error"]
-                ?.jsonObject?.get("message")?.jsonPrimitive?.content
-        }.getOrNull() ?: body.take(300)
+    private fun networkMessage(e: IOException): String = when (e) {
+        is UnknownHostException -> "No internet connection, or OpenAI could not be reached."
+        is SocketTimeoutException -> "OpenAI took too long to respond."
+        is SSLException -> "Secure connection to OpenAI failed: ${e.message ?: e.javaClass.simpleName}"
+        else -> "Network error: ${e.message ?: e.javaClass.simpleName}"
+    }
+
+    private fun errorFor(model: String, code: Int, retryAfter: String?, body: String): OpenAiResult {
+        val error = runCatching { json.parseToJsonElement(body).jsonObject["error"]?.jsonObject }.getOrNull()
+        val errorCode = error?.get("code")?.jsonPrimitive?.contentOrNullSafe()
+        val errorType = error?.get("type")?.jsonPrimitive?.contentOrNullSafe()
+        val detail = error?.get("message")?.jsonPrimitive?.contentOrNullSafe() ?: body.take(300).ifBlank { "no details" }
+        val retryAfterSeconds = retryAfter?.toLongOrNull()
 
         return when {
-            code == 401 || code == 403 -> OpenAiResult.Terminal("Auth failed ($code): $detail")
-            code == 400 -> OpenAiResult.Terminal("Bad request (400): $detail")
-            code == 429 -> OpenAiResult.Transient("Rate limited: $detail", retryAfter?.toLongOrNull())
-            code >= 500 -> OpenAiResult.Transient("Server error ($code): $detail", retryAfter?.toLongOrNull())
-            else -> OpenAiResult.Terminal("HTTP $code: $detail")
+            // OpenAI reports an empty balance as a 429 too, but retrying it can never succeed.
+            errorCode == INSUFFICIENT_QUOTA || errorType == INSUFFICIENT_QUOTA -> OpenAiResult.Terminal(
+                "Your OpenAI account is out of credits or over its spending limit. Add credits at platform.openai.com, then try again.",
+                stopsBatch = true,
+            )
+            code == 401 -> OpenAiResult.Terminal("OpenAI rejected the API key. Check it in Settings.", stopsBatch = true)
+            code == 403 -> OpenAiResult.Terminal("OpenAI denied access: $detail", stopsBatch = true)
+            code == 404 || errorCode == "model_not_found" ->
+                OpenAiResult.Terminal("Model $model is not available to your OpenAI account. Pick another in Settings.", stopsBatch = true)
+            code == 400 -> OpenAiResult.Terminal("OpenAI rejected the request: $detail")
+            code == 408 -> OpenAiResult.Transient("OpenAI timed out.", retryAfterSeconds)
+            code == 429 -> OpenAiResult.Transient("OpenAI rate limit reached: $detail", retryAfterSeconds)
+            code >= 500 -> OpenAiResult.Transient("OpenAI is having problems ($code): $detail", retryAfterSeconds)
+            else -> OpenAiResult.Terminal("OpenAI error $code: $detail")
         }
     }
 
@@ -202,6 +229,7 @@ class OpenAiClient(
 
     private companion object {
         const val ENDPOINT = "https://api.openai.com/v1/chat/completions"
+        const val INSUFFICIENT_QUOTA = "insufficient_quota"
         val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
 
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()

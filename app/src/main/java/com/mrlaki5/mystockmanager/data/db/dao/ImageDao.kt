@@ -97,8 +97,18 @@ interface ImageDao {
         writtenAt: Long,
     )
 
-    @Query("UPDATE images SET state = :to WHERE state = :from")
-    suspend fun resetState(from: ImageState, to: ImageState)
+    /** Puts an image back where it was before generation: generated if it already had metadata, else filed. */
+    @Query(
+        """
+        UPDATE images
+        SET state = CASE WHEN title IS NULL THEN 'FILED' ELSE 'GENERATED' END, generationError = :error
+        WHERE id = :id
+        """
+    )
+    suspend fun restoreAfterFailedGeneration(id: Long, error: String)
+
+    @Query("UPDATE images SET state = CASE WHEN title IS NULL THEN 'FILED' ELSE 'GENERATED' END WHERE state = 'GENERATING'")
+    suspend fun restoreStuckGenerating()
 
     @Query("SELECT * FROM images WHERE folderId = :folderId AND state = :state")
     suspend fun getByFolderAndState(folderId: Long, state: ImageState): List<ImageEntity>

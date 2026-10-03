@@ -64,7 +64,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
-import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
@@ -204,16 +203,6 @@ fun ImageDetailScreen(
                     )
                 }
             }
-
-            current.generationError?.takeIf { current.state == ImageState.GENERATION_FAILED }
-                ?.let { error ->
-                    Text(
-                        error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp),
-                    )
-                }
 
             HorizontalDivider()
 
