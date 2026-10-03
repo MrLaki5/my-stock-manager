@@ -6,6 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.mrlaki5.mystockmanager.ui.components.GenerationFailureDialog
 import com.mrlaki5.mystockmanager.ui.events.EventDetailScreen
 import com.mrlaki5.mystockmanager.ui.events.EventListScreen
 import com.mrlaki5.mystockmanager.ui.images.ImageDetailScreen
@@ -23,6 +24,8 @@ private object Routes {
 @Composable
 fun AppNav() {
     val navController = rememberNavController()
+
+    GenerationFailureDialog()
 
     NavHost(navController = navController, startDestination = Routes.EVENTS) {
         composable(Routes.EVENTS) {

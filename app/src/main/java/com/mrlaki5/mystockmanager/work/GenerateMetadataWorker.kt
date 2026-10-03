@@ -18,6 +18,9 @@ import com.mrlaki5.mystockmanager.storage.ImageEncoder
 import com.mrlaki5.mystockmanager.storage.MediaStoreExporter
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /**
  * Generates and embeds metadata for exactly one image, rewriting it in place in the
@@ -29,6 +32,9 @@ import dagger.assisted.AssistedInject
  *
  * The album file is only overwritten after the embedded copy has been read back and
  * verified, so a failed embed can never damage the image the user already has.
+ *
+ * Any failure puts the image back in the state it had before generation and is reported
+ * through [GenerationAlerts]; it is never left on GENERATING.
  */
 @HiltWorker
 class GenerateMetadataWorker @AssistedInject constructor(
@@ -40,6 +46,8 @@ class GenerateMetadataWorker @AssistedInject constructor(
     private val keyStore: SecureKeyStore,
     private val openAiClient: OpenAiClient,
     private val embedder: MetadataEmbedder,
+    private val workScheduler: WorkScheduler,
+    private val alerts: GenerationAlerts,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
@@ -47,17 +55,29 @@ class GenerateMetadataWorker @AssistedInject constructor(
         val hint = inputData.getString(KEY_HINT)?.takeIf { it.isNotBlank() }
         if (imageId <= 0) return Result.failure()
 
+        return try {
+            generate(imageId, hint)
+        } catch (e: CancellationException) {
+            // Cancelled by delete, by a sibling that hit an account-wide error, or by the system.
+            withContext(NonCancellable) { imageDao.restoreAfterFailedGeneration(imageId, "Generation was stopped") }
+            throw e
+        } catch (e: Exception) {
+            giveUp(imageId, "Unexpected error: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    private suspend fun generate(imageId: Long, hint: String?): Result {
         val image = imageDao.getById(imageId) ?: return Result.failure()
         val mediaUri = image.mediaStoreUri?.toUri()
-            ?: return fail(imageId, "Image is not in the album")
+            ?: return giveUp(imageId, "Image is not in the album")
         if (!mediaStore.exists(mediaUri)) {
-            return fail(imageId, "Image was removed from the album")
+            return giveUp(imageId, "Image was removed from the album")
         }
 
         imageDao.updateState(imageId, ImageState.GENERATING)
 
         val apiKey = keyStore.apiKey
-        if (apiKey.isBlank()) return fail(imageId, "No OpenAI API key set. Add one in Settings.")
+        if (apiKey.isBlank()) return giveUp(imageId, "No OpenAI API key set. Add one in Settings.", stopsBatch = true)
         val model = keyStore.model
         val effort = model.effective(keyStore.reasoningEffort)
         val systemPrompt = keyStore.systemPrompt.ifBlank { VisionPrompt.DEFAULT_SYSTEM }
@@ -65,21 +85,24 @@ class GenerateMetadataWorker @AssistedInject constructor(
         val source = fileStore.newTempFile("gen-src")
         try {
             runCatching { mediaStore.copyTo(mediaUri, source) }
-                .getOrElse { return fail(imageId, "Could not read image: ${it.message}") }
+                .getOrElse { return giveUp(imageId, "Could not read image: ${it.message}") }
 
             val encoded = runCatching { ImageEncoder.toBase64Jpeg(source) }
-                .getOrElse { return fail(imageId, "Could not decode image: ${it.message}") }
+                .getOrElse { return giveUp(imageId, "Could not decode image: ${it.message}") }
 
             return when (val result = openAiClient.generate(apiKey, model.id, effort, encoded, hint, systemPrompt)) {
-                is OpenAiResult.Transient -> {
+                is OpenAiResult.Transient -> if (runAttemptCount + 1 < MAX_ATTEMPTS) {
                     // Stays GENERATING: a retry really is still in flight.
                     imageDao.markFailed(imageId, ImageState.GENERATING, result.message)
                     Result.retry()
+                } else {
+                    giveUp(imageId, result.message)
                 }
 
-                is OpenAiResult.Terminal -> fail(imageId, result.message)
+                is OpenAiResult.Terminal -> giveUp(imageId, result.message, result.stopsBatch)
 
-                is OpenAiResult.Success -> {
+                // Once OpenAI has answered, finish the write even if cancelled, so file and row agree.
+                is OpenAiResult.Success -> withContext(NonCancellable) {
                     // The model writes the caption body; the app owns the caption's shape.
                     // Prepending the lead here rather than asking for it is what makes the
                     // format guaranteed instead of merely requested.
@@ -96,7 +119,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
                     // back what it actually wrote: the clamped values, so the row and the
                     // file cannot disagree about field limits.
                     val written = embedder.embedFrom(source, mediaUri, captioned)
-                        .getOrElse { return fail(imageId, it.message ?: "Embedding failed") }
+                        .getOrElse { return@withContext giveUp(imageId, it.message ?: "Embedding failed") }
 
                     val now = System.currentTimeMillis()
                     imageDao.saveGenerated(
@@ -122,13 +145,19 @@ class GenerateMetadataWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun fail(imageId: Long, message: String): Result {
-        imageDao.markFailed(imageId, ImageState.GENERATION_FAILED, message)
+    /** [stopsBatch] cancels the rest of the queue too, since every other image would fail the same way. */
+    private suspend fun giveUp(imageId: Long, reason: String, stopsBatch: Boolean = false): Result {
+        imageDao.restoreAfterFailedGeneration(imageId, reason)
+        val stopped = if (stopsBatch) workScheduler.cancelOtherGeneration(id) else emptySet()
+        alerts.report(reason, stopped + imageId)
         return Result.failure()
     }
 
     companion object {
         const val KEY_IMAGE_ID = "imageId"
         const val KEY_HINT = "hint"
+
+        /** Network and rate-limit retries, so a lasting outage ends in a message rather than a spinner. */
+        private const val MAX_ATTEMPTS = 3
     }
 }

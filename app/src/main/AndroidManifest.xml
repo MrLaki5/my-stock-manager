@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!--
       No storage permission is declared on purpose. minSdk 29 means scoped storage is
       always on, and an app may insert its own files into MediaStore without one.

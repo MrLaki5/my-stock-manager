@@ -23,7 +23,7 @@ enum class ImageState {
     /** Metadata generated, embedded into the export copy, and read back verified. */
     GENERATED,
 
-    /** Generation failed. Retryable without blocking the rest of the batch. */
+    /** Legacy: failures now restore the previous state, but rows written before that may still hold it. */
     GENERATION_FAILED,
 }
 

@@ -258,10 +258,7 @@ class StockRepository @Inject constructor(
      * A process death mid-generation leaves rows stuck in GENERATING with no worker
      * behind them. Called at startup so the UI never shows a spinner that will never end.
      */
-    suspend fun resetStuckGenerating() = imageDao.resetState(
-        from = ImageState.GENERATING,
-        to = ImageState.FILED,
-    )
+    suspend fun resetStuckGenerating() = imageDao.restoreStuckGenerating()
 
     /**
      * One-time move of images imported before the app kept a single copy in the album.
