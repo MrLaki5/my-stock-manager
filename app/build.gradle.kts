@@ -33,6 +33,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // On-device generation needs the 64-bit ARM runtimes, and that is every phone the app targets.
+        ndk { abiFilters += "arm64-v8a" }
+
         // Exported schemas make future Room migrations reviewable in diffs.
         ksp { arg("room.schemaLocation", "$projectDir/schemas") }
     }
@@ -119,6 +122,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.coil.compose)
     implementation(libs.reorderable)
+    implementation(libs.litertlm.android)
+    implementation(libs.litert)
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver3)

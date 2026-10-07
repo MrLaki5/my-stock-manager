@@ -4,15 +4,22 @@ import android.text.format.DateUtils
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
+import com.mrlaki5.mystockmanager.generation.GenerationProvider
 import com.mrlaki5.mystockmanager.nextcloud.NextcloudAccount
 import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
 import com.mrlaki5.mystockmanager.nextcloud.PullState
 import com.mrlaki5.mystockmanager.nextcloud.SyncCoordinator
+import com.mrlaki5.mystockmanager.ondevice.ModelState
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceClient
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceModel
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceModelStore
 import com.mrlaki5.mystockmanager.openai.OpenAiModel
 import com.mrlaki5.mystockmanager.openai.OpenAiModels
 import com.mrlaki5.mystockmanager.openai.ReasoningEffort
 import com.mrlaki5.mystockmanager.openai.VisionPrompt
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -48,7 +55,21 @@ class SettingsViewModel @Inject constructor(
     private val keyStore: SecureKeyStore,
     private val nextcloud: NextcloudSettings,
     private val coordinator: SyncCoordinator,
+    private val modelStore: OnDeviceModelStore,
+    private val onDeviceClient: OnDeviceClient,
 ) : ViewModel() {
+
+    private val _provider = MutableStateFlow(keyStore.provider)
+    val provider: StateFlow<GenerationProvider> = _provider.asStateFlow()
+
+    val modelState: StateFlow<ModelState> = modelStore.state
+
+    /** Null when the phone has enough memory for the model. */
+    val lowMemoryGb: Double? = modelStore.totalRamBytes
+        .takeIf { it in 1 until OnDeviceModel.RECOMMENDED_RAM_BYTES }
+        ?.let { it / 1_000_000_000.0 }
+
+    private var modelPoll: Job? = null
 
     private val _apiKey = MutableStateFlow(keyStore.apiKey)
     val apiKey: StateFlow<String> = _apiKey.asStateFlow()
@@ -96,6 +117,7 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
+        watchModel()
         // Only a pull seen finishing while this screen is open is announced, not one from last week.
         viewModelScope.launch {
             var active = false
@@ -107,6 +129,36 @@ class SettingsViewModel @Inject constructor(
                     PullState.Idle -> Unit
                 }
                 if (state is PullState.Finished || state is PullState.Failed || state == PullState.Idle) active = false
+            }
+        }
+    }
+
+    fun setProvider(value: GenerationProvider) {
+        _provider.value = value
+        keyStore.provider = value
+    }
+
+    fun downloadModel() {
+        modelStore.startDownload()
+        watchModel()
+    }
+
+    fun cancelModelDownload() = modelStore.cancelDownload()
+
+    fun deleteModel() {
+        viewModelScope.launch {
+            onDeviceClient.release()
+            modelStore.delete()
+            _message.value = "On-device models deleted"
+        }
+    }
+
+    // DownloadManager has no progress callback, so the screen polls while a download is open.
+    private fun watchModel() {
+        if (modelPoll?.isActive == true) return
+        modelPoll = viewModelScope.launch {
+            while (modelStore.refresh().let { it is ModelState.Downloading || it is ModelState.Verifying }) {
+                delay(MODEL_POLL_MS)
             }
         }
     }
@@ -190,4 +242,8 @@ class SettingsViewModel @Inject constructor(
 
     private fun formatSyncTime(at: Long): String =
         DateUtils.formatSameDayTime(at, System.currentTimeMillis(), DateFormat.MEDIUM, DateFormat.SHORT).toString()
+
+    private companion object {
+        const val MODEL_POLL_MS = 1_000L
+    }
 }

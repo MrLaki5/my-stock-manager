@@ -27,7 +27,7 @@ import javax.net.ssl.SSLPeerUnverifiedException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** Mirrors [com.mrlaki5.mystockmanager.openai.OpenAiResult]: the class decides retry versus stop, not the caller. */
+/** Mirrors [com.mrlaki5.mystockmanager.generation.GenerationResult]: the class decides retry versus stop, not the caller. */
 sealed interface DavResult<out T> {
     data class Ok<T>(val value: T) : DavResult<T>
 

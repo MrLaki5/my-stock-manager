@@ -2,12 +2,11 @@ package com.mrlaki5.mystockmanager.storage
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.io.File
 
 /**
- * Downscales a JPEG for the vision call. Full-resolution stock frames are 20-50MP;
+ * Downscales a JPEG for the vision model. Full-resolution stock frames are 20-50MP;
  * sending them wastes tokens and upload time without improving keyword quality, so the
  * long edge is capped and the result re-encoded at a modest quality.
  */
@@ -16,12 +15,12 @@ object ImageEncoder {
     private const val MAX_EDGE = 1024
     private const val QUALITY = 85
 
-    fun toBase64Jpeg(file: File): String {
+    fun toJpeg(file: File): ByteArray {
         val bitmap = decodeScaled(file) ?: error("Could not decode ${file.name} as an image")
         return try {
             ByteArrayOutputStream().use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, QUALITY, out)
-                Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+                out.toByteArray()
             }
         } finally {
             bitmap.recycle()
