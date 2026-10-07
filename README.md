@@ -83,7 +83,7 @@ Two small models run on the phone's CPU, about 10 seconds per image on a mid-ran
   which is free to use, including commercially, below USD 10 million in annual revenue.
 - [SigLIP 2](https://huggingface.co/litert-community/SigLIP2-base-patch16-224) by Google
   (Apache-2.0) picks the keywords and the category. It ranks a built-in vocabulary of about
-  9,700 stock terms against the photo instead of writing keywords, because small vision
+  11,500 stock terms against the photo instead of writing keywords, because small vision
   models loop on long keyword lists. Up to 20 keywords are kept: hint terms first, then words
   from the description that SigLIP agrees with, then its ranking.
 

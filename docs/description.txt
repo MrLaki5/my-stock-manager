@@ -1,35 +1,40 @@
-MyStockManager prepares your photos for stock agencies such as Adobe Stock and Shutterstock. Let AI draft a title, description, and keywords for each image, or write them yourself. Either way, they are written into the JPEG file itself, so when you upload, the metadata is already there.
+MyStockManager prepares your photos for stock agencies such as Adobe Stock and Shutterstock. Let AI draft a title, description, and keywords for each image, with OpenAI or with models that run on your phone, or write them yourself. Either way, they are written into the JPEG file itself, so it is already there when you upload.
 
 HOW IT WORKS
 • Create an event for each shoot, day or theme.
 • Import photos from your phone. Each event becomes its own album under Pictures/StockReady, so the shoot is grouped together in your gallery and in agency upload pickers. Your originals are never touched.
-• Select images and tap Generate. AI drafts a title, a description, up to 49 keywords ordered by relevance, and a category.
-• Add an optional hint for what the photo can't show, such as the place, subject or event. A place you name leads the caption.
-• Or write the metadata by hand. Open any image, including one with no metadata yet, and type the title, description, keywords and category yourself.
-• Steer the AI with your own instructions. Edit the system prompt in Settings to change how titles, descriptions, keywords and categories are written, or reset it to the built-in default.
-• Review and edit everything, whether AI drafted it or you did. Change the title, description or category, and rename, reorder or remove any keyword.
+• Select images and tap Generate. AI drafts a title, a description, keywords ordered by relevance, and a category. On-device models give up to 20 keywords.
+• Add an optional hint for what the photo can't show, such as the place, subject or event.
+• Or write the metadata by hand. Open any image and type the title, description, keywords and category yourself.
+• Steer OpenAI with your own instructions. Edit the system prompt in Settings to change how titles, descriptions, keywords and categories are written, or reset it to the built-in default. The on-device models don't use it.
+• Review and edit everything, whether AI drafted it or you did, including every keyword.
 • Save, and the metadata is written into the file as IPTC and XMP, the fields stock agencies read on upload.
 
 BUILT FOR STOCK WORK
 • Keywords are capped at 49, so one set fits both Adobe Stock and Shutterstock, with a warning if you have fewer than 7.
-• Metadata is embedded without re-encoding. The pixels are left exactly as they were, and every write is checked before the album file is replaced.
-• Editorial-style captions lead with the place, when your hint names one, and the date the photo was taken.
+• Metadata is embedded without re-encoding. Pixels are left untouched, and every write is checked before the album file is replaced.
+• With OpenAI, captions lead with the place, when your hint names one, and the date taken.
 • Generation runs in the background, image by image, and retries network hiccups on its own.
-• If generation fails, for example because you're offline, your OpenAI credit runs out or your API key is rejected, the app tells you why. Affected images go back to how they were, ready to try again.
+• If generation fails, for example because you're offline, your OpenAI credit runs out, your API key is rejected or the on-device models aren't downloaded, the app tells you why. Affected images go back to how they were, ready to try again.
+
+ON-DEVICE GENERATION (OPTIONAL)
+• Generate with no API key and no cost. Two small models run on your phone, about 10 seconds per image on a mid-range phone.
+• Download them once in Settings (about 0.6 GB, from Hugging Face over Wi-Fi) and delete them any time.
+• Photos and hints never leave your phone. The text is simpler than OpenAI's, so review it with care.
 
 OPTIONAL NEXTCLOUD BACKUP
 • Sync every event to your own NextCloud server, one folder per event, over Wi-Fi only by default.
-• Pull everything back after reinstalling or on a new phone. Titles, descriptions and keywords are read back from the files.
+• Pull everything back after reinstalling or on a new phone. Metadata is read back from the files.
 
 YOU STAY IN CONTROL
 • Uploading stays manual. The app never logs in to or submits to any agency. You add the files in the agency's upload form, just like photos you keyworded in Lightroom or Bridge.
 • AI is optional, and it never creates or changes your photos. It only drafts the text, and it is up to you to check that the text describes each image accurately.
-• Photos are sent to OpenAI only when you tap Generate. They are downscaled and have location data removed first. Metadata you write by hand is never sent to OpenAI. There is no account, no ads and no analytics, and the developer receives none of your data.
-• Open source under the MIT license. Read the code, report issues or contribute at https://github.com/MrLaki5/my-stock-manager
+• With OpenAI, photos are sent only when you tap Generate. They are downscaled and have location data removed first. Metadata you write by hand is never sent to OpenAI, and on-device generation sends nothing. There is no account, no ads and no analytics, and the developer receives none of your data.
+• Open source under the MIT license. Code and issues at https://github.com/MrLaki5/my-stock-manager
 
 REQUIREMENTS
-• For AI drafting, your own OpenAI API key, entered in Settings. OpenAI bills your API account for what you use. gpt-6-luna costs much less per image; gpt-6.1-sol tends to give stronger keywords. Higher reasoning settings can improve results but cost more and take longer. Without a key, you can still write all the metadata by hand.
+• For AI drafting, either the on-device models (0.6 GB download, 64-bit ARM phone) or your own OpenAI API key, entered in Settings. OpenAI bills your API account for what you use. gpt-6-luna is much cheaper per image; gpt-6.1-sol gives stronger keywords. Higher reasoning costs more and is slower. With neither, you can still write all the metadata by hand.
 • JPEG photos.
 • Android 10 or later.
 
-MyStockManager is not affiliated with, endorsed by or sponsored by Adobe, Shutterstock or OpenAI.
+MyStockManager is not affiliated with, endorsed by or sponsored by Adobe, Shutterstock, OpenAI, Hugging Face, Liquid AI or Google.

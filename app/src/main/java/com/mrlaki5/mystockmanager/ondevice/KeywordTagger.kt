@@ -13,6 +13,9 @@ import kotlin.math.sqrt
 class KeywordTagger(context: Context, model: File) : AutoCloseable {
 
     private val index = KeywordIndex.load(context)
+    private val breeds = context.assets.open(BREEDS_ASSET).bufferedReader().useLines { lines ->
+        lines.map { it.trim() }.filter { it.isNotEmpty() }.toHashSet()
+    }
     private val interpreter = Interpreter(model, Interpreter.Options().setNumThreads(THREADS))
     private val input = ByteBuffer.allocateDirect(4 * 3 * SIZE * SIZE).order(ByteOrder.nativeOrder())
     private val output = Array(1) { FloatArray(index.dim) }
@@ -32,6 +35,7 @@ class KeywordTagger(context: Context, model: File) : AutoCloseable {
             scores = index.terms.indices.associate { index.terms[it] to z[it] },
             category = index.categories[category],
             vocabulary = index.termSet,
+            breeds = breeds,
         )
     }
 
@@ -70,10 +74,17 @@ class KeywordTagger(context: Context, model: File) : AutoCloseable {
 
     override fun close() = interpreter.close()
 
-    data class Tags(val ranked: List<String>, val scores: Map<String, Float>, val category: String, val vocabulary: Set<String>)
+    data class Tags(
+        val ranked: List<String>,
+        val scores: Map<String, Float>,
+        val category: String,
+        val vocabulary: Set<String>,
+        val breeds: Set<String> = emptySet(),
+    )
 
     private companion object {
         const val SIZE = 224
+        const val BREEDS_ASSET = "keyword_breeds.txt"
         const val THREADS = 4
 
         // Tuned on stock-style photos: a raw top-150 term with a calibrated score of 1.5+ is nearly always visible.

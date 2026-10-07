@@ -13,6 +13,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "..", "app", "src", "main", "assets", "keyword_index.bin")
 # Reviewed by hand: names, brands, named places, slang and niche terms agencies reject or the tagger guesses wrong.
 EXCLUDE = os.path.join(HERE, "exclude.txt")
+# The app keeps only the top two of these, so a dog photo is not filled with breed guesses.
+BREEDS = os.path.join(HERE, "breeds.txt")
+BREEDS_OUT = os.path.join(os.path.dirname(OUT), "keyword_breeds.txt")
 CATS = ["Abstract", "Animals/Wildlife", "Arts", "Backgrounds/Textures", "Beauty/Fashion", "Buildings/Landmarks",
         "Business/Finance", "Celebrities", "Education", "Food and drink", "Healthcare/Medical", "Holidays",
         "Industrial", "Interiors", "Miscellaneous", "Nature", "Objects", "Parks/Outdoor", "People", "Religion",
@@ -23,6 +26,8 @@ VISUAL_NOUNS = {"noun.animal", "noun.artifact", "noun.body", "noun.food", "noun.
 EXTRA = ["elizabethan collar", "pet care", "veterinary care", "pour over coffee", "coffee brewing", "black dog",
          "cutting board", "fresh vegetables", "mountain landscape", "national park", "home interior", "wooden floor",
          "copy space", "close up", "top view", "nobody", "lifestyle", "concept", "background", "texture"]
+# Common stock terms the WordNet filter misses; the bundled index was extended with these.
+EXTRA += [l.strip() for l in open(os.path.join(HERE, "extra_terms.txt")) if l.strip()]
 
 
 def fetch(url, path):
@@ -128,6 +133,9 @@ def export():
         for a in (scales, mu, sd, C.reshape(-1), z["cmu"], z["csd"]):
             f.write(np.asarray(a, dtype="<f4").tobytes())
     print("wrote", os.path.abspath(OUT), os.path.getsize(OUT), "bytes,", len(terms), "terms")
+    breeds = sorted({l.strip() for l in open(BREEDS) if l.strip()} & set(terms))
+    open(BREEDS_OUT, "w").write("\n".join(breeds) + "\n")
+    print("wrote", os.path.abspath(BREEDS_OUT), len(breeds), "breeds")
 
 
 if __name__ == "__main__":

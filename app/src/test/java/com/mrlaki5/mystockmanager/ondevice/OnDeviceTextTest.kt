@@ -43,6 +43,20 @@ class OnDeviceTextTest {
     }
 
     @Test
+    fun `at most two breeds are kept`() {
+        val breeds = listOf("irish setter", "sussex spaniel", "poodle", "dachshund")
+        val dogTags = KeywordTagger.Tags(
+            ranked = breeds + listOf("grass", "lawn"),
+            scores = (breeds + listOf("grass", "lawn")).associateWith { 5f },
+            category = "Animals/Wildlife",
+            vocabulary = (breeds + listOf("grass", "lawn")).toSet(),
+            breeds = breeds.toSet(),
+        )
+        val keywords = OnDeviceText.keywords(null, "A dog lies on the grass.", "Dog on grass", dogTags)
+        assertEquals(listOf("grass", "irish setter", "sussex spaniel", "lawn"), keywords)
+    }
+
+    @Test
     fun `one word cannot fill the list`() {
         val keywords = OnDeviceText.keywords(null, "A dog.", "Dog", tags)
         assertEquals(3, keywords.count { "dog" in it.split(' ') })

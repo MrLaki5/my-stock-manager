@@ -1,0 +1,176 @@
+affenpinscher
+afghan hound
+airedale terrier
+akita
+alaskan malamute
+american bulldog
+american cocker spaniel
+american staffordshire terrier
+appenzeller sennenhund
+australian kelpie
+australian shepherd
+australian silky terrier
+australian terrier
+basenji
+basset hound
+beagle
+bedlington terrier
+belgian malinois
+bernese mountain dog
+bichon frise
+black and tan coonhound
+bloodhound
+bluetick coonhound
+border collie
+border terrier
+borzoi
+boston terrier
+bouvier des flandres
+boxer
+briard
+brittany spaniel
+bulldog
+bullmastiff
+cairn terrier
+cane corso
+cardigan welsh corgi
+cavalier king charles spaniel
+cavapoo
+chesapeake bay retriever
+chihuahua
+chow chow
+clumber spaniel
+cockapoo
+cocker
+cocker spaniel
+collie
+corgi
+cur
+curly-coated retriever
+dachshund
+dalmatian
+dandie dinmont terrier
+doberman
+dobermann
+doodle
+english bulldog
+english cocker spaniel
+english foxhound
+english setter
+english springer spaniel
+entlebucher sennenhund
+flat-coated retriever
+french bulldog
+german shepherd
+german shorthaired pointer
+giant schnauzer
+golden retriever
+goldendoodle
+gordon setter
+great dane
+greater swiss mountain dog
+greyhound
+griffon bruxellois
+groenendael
+guard dog
+gun dog
+havanese
+herding dog
+hound
+hunting dog
+husky
+ibizan hound
+irish setter
+irish terrier
+irish water spaniel
+irish wolfhound
+italian greyhound
+jack russell terrier
+japanese chin
+keeshond
+kerry blue terrier
+king charles spaniel
+komondor
+kuvasz
+labradoodle
+labrador retriever
+lakeland terrier
+lap dog
+lapdog
+leonberger
+lhasa apso
+lurcher
+malinois
+maltese
+maltipoo
+mastiff
+mexican hairless dog
+miniature pinscher
+miniature poodle
+miniature schnauzer
+mixed breed dog
+mongrel
+mutt
+newfoundland
+norfolk terrier
+norwegian elkhound
+norwich terrier
+old english sheepdog
+otterhound
+papillon
+pekingese
+pembroke welsh corgi
+pinscher
+pit bull
+pointer
+pointing breed
+pomeranian
+poodle
+pug
+puppy dog
+pyrenean mountain dog
+redbone coonhound
+retriever
+rhodesian ridgeback
+rottweiler
+saint bernard
+saluki
+samoyed
+scent hound
+schipperke
+schnauzer
+scottish deerhound
+scottish terrier
+sealyham terrier
+setter
+sheepdog
+shepherd dog
+shetland sheepdog
+shiba inu
+shih tzu
+siberian husky
+sighthound
+soft-coated wheaten terrier
+spaniel
+sporting dog
+staffordshire bull terrier
+standard poodle
+standard schnauzer
+sussex spaniel
+terrier
+tibetan mastiff
+tibetan terrier
+toy breed
+toy dog
+toy poodle
+toy terrier
+treeing walker coonhound
+vizsla
+water dog
+weimaraner
+welsh springer spaniel
+west highland white terrier
+whippet
+wire fox terrier
+working dog
+yorkshire terrier

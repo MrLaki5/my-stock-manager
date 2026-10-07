@@ -53,13 +53,20 @@ object OnDeviceText {
         // At most a few terms per shared word, so one subject cannot fill the list with "dog x" variants.
         val uses = HashMap<String, Int>()
         out.values.forEach { term -> term.split(' ').forEach { uses.merge(it, 1, Int::plus) } }
+        // A dog scores high on dozens of breeds; the top ones are usually right and the rest crowd out the scene.
+        var breeds = out.values.count { it in tags.breeds }
         for (term in tags.ranked) {
             if (out.size >= TARGET_KEYWORDS) break
             val parts = term.split(' ')
             if (parts.any { (uses[it] ?: 0) >= MAX_PER_WORD }) continue
+            val breed = term in tags.breeds
+            if (breed && breeds >= MAX_BREEDS) continue
             val before = out.size
             add(term)
-            if (out.size > before) parts.forEach { uses.merge(it, 1, Int::plus) }
+            if (out.size > before) {
+                parts.forEach { uses.merge(it, 1, Int::plus) }
+                if (breed) breeds++
+            }
         }
         return out.values.toList()
     }
@@ -83,6 +90,7 @@ object OnDeviceText {
     // Enough for agencies to rank well without padding past what the photo supports.
     private const val TARGET_KEYWORDS = 20
     private const val MAX_PER_WORD = 3
+    private const val MAX_BREEDS = 2
     private const val CAPTION_MIN_Z = 1.5f
 
     private val STOPWORDS = setOf(
