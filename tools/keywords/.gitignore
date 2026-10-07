@@ -1,0 +1,5 @@
+calib/
+nltk_data/
+index.npz
+badwords.txt
+oi_classes.csv

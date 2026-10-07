@@ -23,9 +23,11 @@ Shutterstock already carries its metadata.
   `Pictures/StockReady/StockReady - <event>/`, visible in your gallery and in every upload
   picker immediately. Your camera roll is never touched, and there is no second private copy
   to drift out of sync.
-- **Generates metadata with OpenAI vision** - title, description, up to 49 relevance-ordered
-  keywords, and a category. An optional hint adds what the model cannot see in the pixels,
-  such as the place, subject or event; a place it names leads the caption.
+- **Generates metadata with OpenAI vision, or on the phone itself** - title, description,
+  relevance-ordered keywords, and a category. An optional hint adds what the model cannot see
+  in the pixels, such as the place, subject or event; with OpenAI, a place it names leads the
+  caption. The on-device option needs no API key, costs nothing, and the photo never leaves
+  the phone; see [On-device generation](#on-device-generation).
 - **Embeds it losslessly** into IPTC IIM (APP13) and XMP (APP1). Segments are spliced;
   pixels are never decoded or re-encoded.
 - **Verifies every write.** The embedded copy is read back and compared before the album
@@ -50,7 +52,8 @@ Shutterstock already carries its metadata.
 
 MyStockManager never connects to Adobe Stock or Shutterstock. It has no agency login, stores no
 agency credentials, and does not submit, schedule or automate uploads. It talks to the OpenAI API,
-for metadata, and, only if you set up sync, to your own NextCloud server, as a backup copy of
+for metadata, unless you generate on the device; to Hugging Face, once, if you download the
+on-device models; and, only if you set up sync, to your own NextCloud server, as a backup copy of
 your events.
 
 All it prepares is files. Each event is its own folder under `Pictures/StockReady/`, so when you
@@ -68,11 +71,36 @@ that the text describes each image accurately.
 Adobe Stock caps keywords at 49, Shutterstock at 50 with a minimum of 7. The app clamps to
 49 so one keyword set satisfies both, and warns below 7.
 
+## On-device generation
+
+Two small models run on the phone's CPU, about 10 seconds per image on a mid-range phone
+(the first image of a batch also loads the models, a few seconds more):
+
+- [LFM2.5-VL-450M](https://huggingface.co/litert-community/LFM2.5-VL-450M) by Liquid AI writes
+  the description, then the title as a follow-up in the same conversation, run with
+  [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM). It is under the
+  [LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-VL-450M/blob/main/LICENSE),
+  which is free to use, including commercially, below USD 10 million in annual revenue.
+- [SigLIP 2](https://huggingface.co/litert-community/SigLIP2-base-patch16-224) by Google
+  (Apache-2.0) picks the keywords and the category. It ranks a built-in vocabulary of about
+  9,700 stock terms against the photo instead of writing keywords, because small vision
+  models loop on long keyword lists. Up to 20 keywords are kept: hint terms first, then words
+  from the description that SigLIP agrees with, then its ranking.
+
+Both files (0.6 GB in total) are downloaded over Wi-Fi from Hugging Face when you ask for them
+in Settings, pinned to a fixed revision and checked against their SHA-256. The vocabulary ships
+in the app as `app/src/main/assets/keyword_index.bin`; see [tools/keywords](tools/keywords) to
+rebuild it. The text is simpler than OpenAI's, and the editable system prompt applies to OpenAI
+only.
+
 ## Build
 
-Generation requires an OpenAI API key, entered in Settings - none is bundled. Without one,
-everything else works and metadata can be written by hand. Model is selectable between
-`gpt-6-luna` (default) and `gpt-6.1-sol`, with a reasoning effort level.
+Generation uses either an OpenAI API key, entered in Settings - none is bundled - or the
+on-device models. Model is selectable between `gpt-6-luna` (default) and `gpt-6.1-sol`, with a
+reasoning effort level. Without either, everything else works and metadata can be written by
+hand.
+
+The app is built for arm64-v8a only, the ABI the on-device runtimes ship for.
 
 ```bash
 ./gradlew installDebug

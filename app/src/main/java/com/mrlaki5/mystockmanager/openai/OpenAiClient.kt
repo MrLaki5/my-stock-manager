@@ -1,8 +1,7 @@
 package com.mrlaki5.mystockmanager.openai
 
-import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
-import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
-import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
+import com.mrlaki5.mystockmanager.generation.GenerationResult
+import com.mrlaki5.mystockmanager.generation.MetadataSchema
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -24,26 +23,6 @@ import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 import java.util.concurrent.TimeUnit
 
-/**
- * Outcome shape mirrors what WorkManager needs: [Transient] becomes Result.retry(),
- * [Terminal] becomes Result.failure(). Deciding that here keeps the retry policy in one
- * place instead of spread across the worker.
- */
-sealed interface OpenAiResult {
-    data class Success(
-        val metadata: StockMetadata,
-        /** The place the hint named, for the caption lead; null when it named none. */
-        val place: String?,
-        val promptTokens: Int?,
-        val completionTokens: Int?,
-    ) : OpenAiResult
-
-    data class Transient(val message: String, val retryAfterSeconds: Long?) : OpenAiResult
-
-    /** [stopsBatch] marks account-wide failures (no credits, bad key) every queued image would hit too. */
-    data class Terminal(val message: String, val stopsBatch: Boolean = false) : OpenAiResult
-}
-
 class OpenAiClient(
     private val client: OkHttpClient = defaultClient(),
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -57,8 +36,8 @@ class OpenAiClient(
         imageBase64Jpeg: String,
         hint: String? = null,
         systemPrompt: String = VisionPrompt.DEFAULT_SYSTEM,
-    ): OpenAiResult {
-        if (apiKey.isBlank()) return OpenAiResult.Terminal("No OpenAI API key set. Add one in Settings.", stopsBatch = true)
+    ): GenerationResult {
+        if (apiKey.isBlank()) return GenerationResult.Terminal("No OpenAI API key set. Add one in Settings.", stopsBatch = true)
 
         val request = Request.Builder()
             .url(endpoint)
@@ -69,14 +48,14 @@ class OpenAiClient(
         val response = try {
             client.newCall(request).execute()
         } catch (e: IOException) {
-            return OpenAiResult.Transient(networkMessage(e), null)
+            return GenerationResult.Transient(networkMessage(e), null)
         }
 
         response.use {
             val body = try {
                 it.body.string()
             } catch (e: IOException) {
-                return OpenAiResult.Transient(networkMessage(e), null)
+                return GenerationResult.Transient(networkMessage(e), null)
             }
             if (!it.isSuccessful) return errorFor(model, it.code, it.header("Retry-After"), body)
             return parseSuccess(body)
@@ -90,7 +69,7 @@ class OpenAiClient(
         else -> "Network error: ${e.message ?: e.javaClass.simpleName}"
     }
 
-    private fun errorFor(model: String, code: Int, retryAfter: String?, body: String): OpenAiResult {
+    private fun errorFor(model: String, code: Int, retryAfter: String?, body: String): GenerationResult {
         val error = runCatching { json.parseToJsonElement(body).jsonObject["error"]?.jsonObject }.getOrNull()
         val errorCode = error?.get("code")?.jsonPrimitive?.contentOrNullSafe()
         val errorType = error?.get("type")?.jsonPrimitive?.contentOrNullSafe()
@@ -99,41 +78,41 @@ class OpenAiClient(
 
         return when {
             // OpenAI reports an empty balance as a 429 too, but retrying it can never succeed.
-            errorCode == INSUFFICIENT_QUOTA || errorType == INSUFFICIENT_QUOTA -> OpenAiResult.Terminal(
+            errorCode == INSUFFICIENT_QUOTA || errorType == INSUFFICIENT_QUOTA -> GenerationResult.Terminal(
                 "Your OpenAI account is out of credits or over its spending limit. Add credits at platform.openai.com, then try again.",
                 stopsBatch = true,
             )
-            code == 401 -> OpenAiResult.Terminal("OpenAI rejected the API key. Check it in Settings.", stopsBatch = true)
-            code == 403 -> OpenAiResult.Terminal("OpenAI denied access: $detail", stopsBatch = true)
+            code == 401 -> GenerationResult.Terminal("OpenAI rejected the API key. Check it in Settings.", stopsBatch = true)
+            code == 403 -> GenerationResult.Terminal("OpenAI denied access: $detail", stopsBatch = true)
             code == 404 || errorCode == "model_not_found" ->
-                OpenAiResult.Terminal("Model $model is not available to your OpenAI account. Pick another in Settings.", stopsBatch = true)
-            code == 400 -> OpenAiResult.Terminal("OpenAI rejected the request: $detail")
-            code == 408 -> OpenAiResult.Transient("OpenAI timed out.", retryAfterSeconds)
-            code == 429 -> OpenAiResult.Transient("OpenAI rate limit reached: $detail", retryAfterSeconds)
-            code >= 500 -> OpenAiResult.Transient("OpenAI is having problems ($code): $detail", retryAfterSeconds)
-            else -> OpenAiResult.Terminal("OpenAI error $code: $detail")
+                GenerationResult.Terminal("Model $model is not available to your OpenAI account. Pick another in Settings.", stopsBatch = true)
+            code == 400 -> GenerationResult.Terminal("OpenAI rejected the request: $detail")
+            code == 408 -> GenerationResult.Transient("OpenAI timed out.", retryAfterSeconds)
+            code == 429 -> GenerationResult.Transient("OpenAI rate limit reached: $detail", retryAfterSeconds)
+            code >= 500 -> GenerationResult.Transient("OpenAI is having problems ($code): $detail", retryAfterSeconds)
+            else -> GenerationResult.Terminal("OpenAI error $code: $detail")
         }
     }
 
-    private fun parseSuccess(body: String): OpenAiResult {
+    private fun parseSuccess(body: String): GenerationResult {
         val root = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
-            ?: return OpenAiResult.Terminal("Response was not JSON.")
+            ?: return GenerationResult.Terminal("Response was not JSON.")
 
         val choice = root["choices"]?.jsonArray?.firstOrNull()?.jsonObject
-            ?: return OpenAiResult.Terminal("Response contained no choices.")
+            ?: return GenerationResult.Terminal("Response contained no choices.")
 
         choice["message"]?.jsonObject?.get("refusal")?.jsonPrimitive?.contentOrNullSafe()?.let {
-            return OpenAiResult.Terminal("Model refused: $it")
+            return GenerationResult.Terminal("Model refused: $it")
         }
 
         val content = choice["message"]?.jsonObject?.get("content")?.jsonPrimitive?.content
-            ?: return OpenAiResult.Terminal("Response contained no content.")
+            ?: return GenerationResult.Terminal("Response contained no content.")
 
         val metadata = MetadataParser.parse(content, json)
-            ?: return OpenAiResult.Terminal("Could not parse metadata JSON: ${content.take(200)}")
+            ?: return GenerationResult.Terminal("Could not parse metadata JSON: ${content.take(200)}")
 
         val usage = root["usage"]?.jsonObject
-        return OpenAiResult.Success(
+        return GenerationResult.Success(
             metadata = metadata,
             place = MetadataParser.parsePlace(content, json),
             promptTokens = usage?.get("prompt_tokens")?.jsonPrimitive?.content?.toIntOrNull(),
@@ -189,43 +168,10 @@ class OpenAiClient(
                 putJsonObject("json_schema") {
                     put("name", "stock_metadata")
                     put("strict", true)
-                    put("schema", metadataSchema())
+                    put("schema", MetadataSchema.json)
                 }
             }
         }
-
-    private fun metadataSchema(): JsonObject = buildJsonObject {
-        put("type", "object")
-        put("additionalProperties", false)
-        putJsonArray("required") {
-            add("title"); add("description"); add("keywords")
-            add("shutterstock_category"); add("secondary_category"); add("place")
-        }
-        putJsonObject("properties") {
-            putJsonObject("title") {
-                put("type", "string")
-            }
-            putJsonObject("description") {
-                put("type", "string")
-            }
-            putJsonObject("keywords") {
-                put("type", "array")
-                put("minItems", MIN_KEYWORDS)
-                put("maxItems", MAX_KEYWORDS)
-                putJsonObject("items") { put("type", "string") }
-            }
-            putJsonObject("shutterstock_category") {
-                put("type", "string")
-                putJsonArray("enum") { SHUTTERSTOCK_CATEGORIES.forEach { add(it) } }
-            }
-            putJsonObject("secondary_category") {
-                putJsonArray("type") { add("string"); add("null") }
-            }
-            putJsonObject("place") {
-                putJsonArray("type") { add("string"); add("null") }
-            }
-        }
-    }
 
     private companion object {
         const val ENDPOINT = "https://api.openai.com/v1/chat/completions"

@@ -41,6 +41,7 @@ object MetadataParser {
         runCatching { json.parseToJsonElement(content).jsonObject["place"]?.stringOrNull()?.trim() }
             .getOrNull()?.takeIf { it.isNotEmpty() }
 
+    // Small on-device models write the string "null" where the schema allows a real null.
     private fun kotlinx.serialization.json.JsonElement.stringOrNull(): String? =
-        if (this is JsonNull) null else jsonPrimitive.content.takeIf { it.isNotBlank() }
+        if (this is JsonNull) null else jsonPrimitive.content.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
 }

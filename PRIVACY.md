@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **MyStockManager**, Android app
-Effective date: 1 October 2026
+Effective date: 7 October 2026
 
 MyStockManager helps you prepare your own photos for stock agencies by writing a title,
 description and keywords into each file. This policy explains what data the app handles,
@@ -13,6 +13,8 @@ where that data goes, and how to delete it.
   developer servers, no analytics, no advertising and no account.
 - The app sends a photo to OpenAI only when you choose that photo and tap Generate.
   Metadata you write by hand is never sent to OpenAI.
+- If you choose on-device generation instead, photos are processed on your phone and are
+  not sent anywhere.
 - If you turn on sync, the app uploads your photos to the NextCloud server you set up.
 - Your OpenAI API key and NextCloud app password are stored encrypted on your device.
 
@@ -37,6 +39,18 @@ and privacy policy: <https://openai.com/policies/privacy-policy>.
 
 Generating is optional. You can write an image's title, description and keywords yourself
 instead. When you do, nothing about that image is sent to OpenAI.
+
+### On-device generation (optional)
+
+In Settings you can choose to generate metadata on your phone instead of with OpenAI. The
+app then downloads two models from Hugging Face (`huggingface.co`) once, when you tap
+Download: Liquid AI's LFM2.5-VL, which writes the title and description, and Google's
+SigLIP 2, which picks the keywords (about 0.6 GB together). Like any download, this request
+reveals your IP address to Hugging Face, but nothing about you or your photos is sent. After
+that, your photos and hints are processed entirely on your phone and never leave it.
+
+The model files are stored in the app's own storage, are excluded from backups, and are
+removed when you delete them in Settings or uninstall the app.
 
 ### Photos and metadata synced to NextCloud (optional)
 

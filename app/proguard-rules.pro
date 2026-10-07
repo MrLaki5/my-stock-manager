@@ -48,3 +48,9 @@
 # Tink is compiled against Error Prone's annotations, which are compile-time only
 # and not shipped in any runtime artifact.
 -dontwarn com.google.errorprone.annotations.**
+
+# --- LiteRT-LM and LiteRT ---
+# Their native code calls back into these classes by name over JNI.
+-keep class com.google.ai.edge.litertlm.** { *; }
+-keep class org.tensorflow.lite.** { *; }
+-keep class com.google.ai.edge.litert.** { *; }

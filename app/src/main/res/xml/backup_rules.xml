@@ -6,4 +6,6 @@
       useless, confusing blob out of backups.
     -->
     <exclude domain="sharedpref" path="stock_secure_prefs.xml" />
+    <!-- The 2.6 GB on-device model is far over the backup quota and can be downloaded again. -->
+    <exclude domain="external" path="models/" />
 </full-backup-content>

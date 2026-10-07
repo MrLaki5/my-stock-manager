@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.openai
 
+import com.mrlaki5.mystockmanager.generation.GenerationResult
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
@@ -40,8 +41,8 @@ class OpenAiClientTest {
     fun `out of credits stops the batch instead of retrying`() {
         respond(429, errorCode = "insufficient_quota", type = "insufficient_quota")
         val result = generate()
-        assertTrue(result is OpenAiResult.Terminal)
-        result as OpenAiResult.Terminal
+        assertTrue(result is GenerationResult.Terminal)
+        result as GenerationResult.Terminal
         assertTrue(result.stopsBatch)
         assertTrue(result.message.contains("out of credits"))
     }
@@ -49,7 +50,7 @@ class OpenAiClientTest {
     @Test
     fun `plain rate limit is retried`() {
         respond(429, errorCode = "rate_limit_exceeded")
-        assertTrue(generate() is OpenAiResult.Transient)
+        assertTrue(generate() is GenerationResult.Transient)
     }
 
     @Test
@@ -57,14 +58,14 @@ class OpenAiClientTest {
         respond(401, errorCode = "invalid_api_key")
         respond(404, errorCode = "model_not_found")
         listOf(generate(), generate()).forEach {
-            assertTrue(it is OpenAiResult.Terminal && it.stopsBatch)
+            assertTrue(it is GenerationResult.Terminal && it.stopsBatch)
         }
     }
 
     @Test
     fun `bad request fails only that image`() {
         respond(400, message = "image too small")
-        val result = generate() as OpenAiResult.Terminal
+        val result = generate() as GenerationResult.Terminal
         assertFalse(result.stopsBatch)
         assertTrue(result.message.contains("image too small"))
     }
@@ -72,28 +73,28 @@ class OpenAiClientTest {
     @Test
     fun `server errors are retried`() {
         respond(503)
-        assertTrue(generate() is OpenAiResult.Transient)
+        assertTrue(generate() is GenerationResult.Transient)
     }
 
     @Test
     fun `unreachable host is a transient network failure`() {
         val offline = OpenAiClient(endpoint = "https://openai.invalid/v1/chat/completions")
         val result = offline.generate("sk-test", "gpt-6-luna", ReasoningEffort.LOW, "AAAA")
-        assertTrue(result is OpenAiResult.Transient)
+        assertTrue(result is GenerationResult.Transient)
     }
 
     @Test
     fun `timeout is a transient failure`() {
         server.enqueue(MockResponse.Builder().code(200).body("{}").headersDelay(3, TimeUnit.SECONDS).build())
         val result = generate()
-        assertTrue(result is OpenAiResult.Transient)
-        assertEquals("OpenAI took too long to respond.", (result as OpenAiResult.Transient).message)
+        assertTrue(result is GenerationResult.Transient)
+        assertEquals("OpenAI took too long to respond.", (result as GenerationResult.Transient).message)
     }
 
     @Test
     fun `blank key never reaches the network`() {
         val result = client.generate("", "gpt-6-luna", ReasoningEffort.LOW, "AAAA")
-        assertTrue(result is OpenAiResult.Terminal && result.stopsBatch)
+        assertTrue(result is GenerationResult.Terminal && result.stopsBatch)
         assertEquals(0, server.requestCount)
     }
 }

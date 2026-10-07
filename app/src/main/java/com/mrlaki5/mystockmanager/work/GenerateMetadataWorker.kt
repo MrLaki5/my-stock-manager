@@ -1,6 +1,7 @@
 package com.mrlaki5.mystockmanager.work
 
 import android.content.Context
+import android.util.Base64
 import androidx.core.net.toUri
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
@@ -8,10 +9,14 @@ import androidx.work.WorkerParameters
 import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
+import com.mrlaki5.mystockmanager.generation.GenerationProvider
 import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
 import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceClient
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceModel
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceModelStore
 import com.mrlaki5.mystockmanager.openai.OpenAiClient
-import com.mrlaki5.mystockmanager.openai.OpenAiResult
+import com.mrlaki5.mystockmanager.generation.GenerationResult
 import com.mrlaki5.mystockmanager.openai.VisionPrompt
 import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.ImageEncoder
@@ -45,6 +50,8 @@ class GenerateMetadataWorker @AssistedInject constructor(
     private val mediaStore: MediaStoreExporter,
     private val keyStore: SecureKeyStore,
     private val openAiClient: OpenAiClient,
+    private val onDeviceClient: OnDeviceClient,
+    private val modelStore: OnDeviceModelStore,
     private val embedder: MetadataEmbedder,
     private val workScheduler: WorkScheduler,
     private val alerts: GenerationAlerts,
@@ -53,10 +60,11 @@ class GenerateMetadataWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val imageId = inputData.getLong(KEY_IMAGE_ID, -1L)
         val hint = inputData.getString(KEY_HINT)?.takeIf { it.isNotBlank() }
+        val provider = GenerationProvider.of(inputData.getString(KEY_PROVIDER).orEmpty())
         if (imageId <= 0) return Result.failure()
 
-        return try {
-            generate(imageId, hint)
+        val result = try {
+            generate(imageId, hint, provider)
         } catch (e: CancellationException) {
             // Cancelled by delete, by a sibling that hit an account-wide error, or by the system.
             withContext(NonCancellable) { imageDao.restoreAfterFailedGeneration(imageId, "Generation was stopped") }
@@ -64,9 +72,12 @@ class GenerateMetadataWorker @AssistedInject constructor(
         } catch (e: Exception) {
             giveUp(imageId, "Unexpected error: ${e.message ?: e.javaClass.simpleName}")
         }
+        // On-device jobs run as one chain, where a failure would fail every image after it.
+        // This image's failure is already on its row and in the alerts.
+        return if (provider == GenerationProvider.ON_DEVICE && result is Result.Failure) Result.success() else result
     }
 
-    private suspend fun generate(imageId: Long, hint: String?): Result {
+    private suspend fun generate(imageId: Long, hint: String?, provider: GenerationProvider): Result {
         val image = imageDao.getById(imageId) ?: return Result.failure()
         val mediaUri = image.mediaStoreUri?.toUri()
             ?: return giveUp(imageId, "Image is not in the album")
@@ -77,9 +88,17 @@ class GenerateMetadataWorker @AssistedInject constructor(
         imageDao.updateState(imageId, ImageState.GENERATING)
 
         val apiKey = keyStore.apiKey
-        if (apiKey.isBlank()) return giveUp(imageId, "No OpenAI API key set. Add one in Settings.", stopsBatch = true)
+        val onDeviceModels = modelStore.readyFiles()
+        when (provider) {
+            GenerationProvider.OPENAI -> if (apiKey.isBlank()) {
+                return giveUp(imageId, "No OpenAI API key set. Add one in Settings.", stopsBatch = true)
+            }
+            GenerationProvider.ON_DEVICE -> if (onDeviceModels == null) {
+                return giveUp(imageId, "The on-device models are not downloaded. Download them in Settings.", stopsBatch = true)
+            }
+        }
         val model = keyStore.model
-        val effort = model.effective(keyStore.reasoningEffort)
+        val modelId = if (provider == GenerationProvider.ON_DEVICE) OnDeviceModel.ID else model.id
         val systemPrompt = keyStore.systemPrompt.ifBlank { VisionPrompt.DEFAULT_SYSTEM }
 
         val source = fileStore.newTempFile("gen-src")
@@ -87,11 +106,18 @@ class GenerateMetadataWorker @AssistedInject constructor(
             runCatching { mediaStore.copyTo(mediaUri, source) }
                 .getOrElse { return giveUp(imageId, "Could not read image: ${it.message}") }
 
-            val encoded = runCatching { ImageEncoder.toBase64Jpeg(source) }
+            val jpeg = runCatching { ImageEncoder.toJpeg(source) }
                 .getOrElse { return giveUp(imageId, "Could not decode image: ${it.message}") }
 
-            return when (val result = openAiClient.generate(apiKey, model.id, effort, encoded, hint, systemPrompt)) {
-                is OpenAiResult.Transient -> if (runAttemptCount + 1 < MAX_ATTEMPTS) {
+            val result = when (provider) {
+                GenerationProvider.OPENAI -> {
+                    val encoded = Base64.encodeToString(jpeg, Base64.NO_WRAP)
+                    openAiClient.generate(apiKey, model.id, model.effective(keyStore.reasoningEffort), encoded, hint, systemPrompt)
+                }
+                GenerationProvider.ON_DEVICE -> onDeviceClient.generate(onDeviceModels!!, jpeg, hint)
+            }
+            return when (result) {
+                is GenerationResult.Transient -> if (runAttemptCount + 1 < MAX_ATTEMPTS) {
                     // Stays GENERATING: a retry really is still in flight.
                     imageDao.markFailed(imageId, ImageState.GENERATING, result.message)
                     Result.retry()
@@ -99,17 +125,19 @@ class GenerateMetadataWorker @AssistedInject constructor(
                     giveUp(imageId, result.message)
                 }
 
-                is OpenAiResult.Terminal -> giveUp(imageId, result.message, result.stopsBatch)
+                is GenerationResult.Terminal -> giveUp(imageId, result.message, result.stopsBatch)
 
-                // Once OpenAI has answered, finish the write even if cancelled, so file and row agree.
-                is OpenAiResult.Success -> withContext(NonCancellable) {
+                // Once the model has answered, finish the write even if cancelled, so file and row agree.
+                is GenerationResult.Success -> withContext(NonCancellable) {
+                    // Only a hint can name the place; a model guessing one from pixels is ignored.
+                    val place = result.place.takeIf { hint != null }
                     // The model writes the caption body; the app owns the caption's shape.
                     // Prepending the lead here rather than asking for it is what makes the
                     // format guaranteed instead of merely requested.
                     val body = result.metadata.description
                     val captioned = result.metadata.copy(
                         description = EditorialCaption.build(
-                            location = result.place,
+                            location = place,
                             capturedOn = image.capturedOn,
                             body = body,
                         ),
@@ -133,8 +161,8 @@ class GenerateMetadataWorker @AssistedInject constructor(
                         category = written.category,
                         state = ImageState.GENERATED,
                         generatedAt = now,
-                        model = model.id,
-                        captionPlace = result.place.orEmpty(),
+                        model = modelId,
+                        captionPlace = place.orEmpty(),
                     )
                     imageDao.markExported(imageId, image.mediaStoreUri, now)
                     Result.success()
@@ -156,6 +184,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
     companion object {
         const val KEY_IMAGE_ID = "imageId"
         const val KEY_HINT = "hint"
+        const val KEY_PROVIDER = "provider"
 
         /** Network and rate-limit retries, so a lasting outage ends in a message rather than a spinner. */
         private const val MAX_ATTEMPTS = 3

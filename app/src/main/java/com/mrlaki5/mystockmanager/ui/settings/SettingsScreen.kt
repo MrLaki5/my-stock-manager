@@ -22,6 +22,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -46,6 +47,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mrlaki5.mystockmanager.generation.GenerationProvider
+import com.mrlaki5.mystockmanager.ondevice.ModelState
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceModel
 import com.mrlaki5.mystockmanager.openai.OpenAiModels
 import com.mrlaki5.mystockmanager.openai.VisionPrompt
 
@@ -55,9 +59,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    val apiKey by viewModel.apiKey.collectAsStateWithLifecycle()
-    val model by viewModel.model.collectAsStateWithLifecycle()
-    val reasoningEffort by viewModel.reasoningEffort.collectAsStateWithLifecycle()
+    val provider by viewModel.provider.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -91,43 +93,23 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val uriHandler = LocalUriHandler.current
-            SectionTitle("OpenAI", OPENAI_API_KEY_HELP_URL, "How to get an OpenAI API key")
-            OutlinedTextField(
-                value = apiKey,
-                onValueChange = viewModel::setApiKey,
-                label = { Text("OpenAI API key") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Hint("Stored encrypted on this device. Sent only to api.openai.com.")
-
-            Text("Model", style = MaterialTheme.typography.titleSmall)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                viewModel.availableModels.forEach { candidate ->
-                    FilterChip(
-                        selected = candidate == model,
-                        onClick = { viewModel.setModel(candidate) },
-                        label = { Text(candidate.id) },
-                    )
-                }
-            }
-            Hint("${OpenAiModels.LUNA.id} is much cheaper per image; ${OpenAiModels.SOL.id} tends to produce stronger keywords.")
-
-            Text("Reasoning", style = MaterialTheme.typography.titleSmall)
+            Text("Generate metadata with", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                model.efforts.forEach { effort ->
+                GenerationProvider.entries.forEach { candidate ->
                     FilterChip(
-                        selected = effort == reasoningEffort,
-                        onClick = { viewModel.setReasoningEffort(effort) },
-                        label = { Text(effort.label) },
+                        selected = candidate == provider,
+                        onClick = { viewModel.setProvider(candidate) },
+                        label = { Text(candidate.label) },
                     )
                 }
             }
-            Hint("Higher reasoning can improve results but costs more and takes longer.")
-
-            PromptSection(viewModel)
+            when (provider) {
+                GenerationProvider.OPENAI -> {
+                    OpenAiSection(viewModel)
+                    PromptSection(viewModel)
+                }
+                GenerationProvider.ON_DEVICE -> OnDeviceSection(viewModel)
+            }
 
             HorizontalDivider()
             NextcloudSection(viewModel)
@@ -152,6 +134,122 @@ private const val PRIVACY_POLICY_URL =
     "https://github.com/MrLaki5/my-stock-manager/blob/main/PRIVACY.md"
 
 private const val SOURCE_CODE_URL = "https://github.com/MrLaki5/my-stock-manager"
+
+@Composable
+private fun OpenAiSection(viewModel: SettingsViewModel) {
+    val apiKey by viewModel.apiKey.collectAsStateWithLifecycle()
+    val model by viewModel.model.collectAsStateWithLifecycle()
+    val reasoningEffort by viewModel.reasoningEffort.collectAsStateWithLifecycle()
+
+    SectionTitle("OpenAI", OPENAI_API_KEY_HELP_URL, "How to get an OpenAI API key")
+    OutlinedTextField(
+        value = apiKey,
+        onValueChange = viewModel::setApiKey,
+        label = { Text("OpenAI API key") },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Hint("Stored encrypted on this device. Sent only to api.openai.com.")
+
+    Text("Model", style = MaterialTheme.typography.titleSmall)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        viewModel.availableModels.forEach { candidate ->
+            FilterChip(
+                selected = candidate == model,
+                onClick = { viewModel.setModel(candidate) },
+                label = { Text(candidate.id) },
+            )
+        }
+    }
+    Hint("${OpenAiModels.LUNA.id} is much cheaper per image; ${OpenAiModels.SOL.id} tends to produce stronger keywords.")
+
+    Text("Reasoning", style = MaterialTheme.typography.titleSmall)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        model.efforts.forEach { effort ->
+            FilterChip(
+                selected = effort == reasoningEffort,
+                onClick = { viewModel.setReasoningEffort(effort) },
+                label = { Text(effort.label) },
+            )
+        }
+    }
+    Hint("Higher reasoning can improve results but costs more and takes longer.")
+}
+
+@Composable
+private fun OnDeviceSection(viewModel: SettingsViewModel) {
+    val state by viewModel.modelState.collectAsStateWithLifecycle()
+    var confirmingDelete by remember { mutableStateOf(false) }
+
+    SectionTitle("On-device models", OnDeviceModel.PAGE_URL, "About the on-device models")
+    Hint(
+        "LFM2.5-VL by Liquid AI writes the title and description, and SigLIP 2 by Google picks the keywords. " +
+            "Both run on this phone: free, no account, and photos never leave the device. About 10 to 20 seconds " +
+            "per image; the text is simpler than OpenAI's."
+    )
+    viewModel.lowMemoryGb?.let {
+        Text(
+            "This phone has %.1f GB of memory. The models need about 1 GB of it and may be slow or fail here.".format(it),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+
+    when (val current = state) {
+        ModelState.Unsupported -> Text(
+            "On-device generation needs a 64-bit processor, which this phone does not have.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        ModelState.Missing -> {
+            Button(onClick = viewModel::downloadModel) { Text("Download models (%.1f GB)".format(OnDeviceModel.TOTAL_BYTES / 1e9)) }
+            Hint("Downloads once, over Wi-Fi only, from Hugging Face. LFM2.5-VL is under the LFM Open License.")
+        }
+        is ModelState.Downloading -> {
+            LinearProgressIndicator(
+                progress = { (current.bytes.toFloat() / current.total).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (current.waitingForWifi) "Waiting for Wi-Fi…"
+                    else "%.2f of %.2f GB".format(current.bytes / 1e9, current.total / 1e9),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = viewModel::cancelModelDownload) { Text("Cancel") }
+            }
+        }
+        ModelState.Verifying -> {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Text("Checking the download…", style = MaterialTheme.typography.bodyMedium)
+        }
+        ModelState.Ready -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Models ready", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { confirmingDelete = true }) { Text("Delete models") }
+        }
+        is ModelState.Failed -> {
+            Text(current.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            Button(onClick = viewModel::downloadModel) { Text("Retry download") }
+        }
+    }
+
+    if (confirmingDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmingDelete = false },
+            title = { Text("Delete models?") },
+            text = { Text("Frees %.1f GB. You will need to download them again to generate on this phone.".format(OnDeviceModel.TOTAL_BYTES / 1e9)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingDelete = false
+                    viewModel.deleteModel()
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { confirmingDelete = false }) { Text("Cancel") } },
+        )
+    }
+}
 
 @Composable
 private fun PromptSection(viewModel: SettingsViewModel) {

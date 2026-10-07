@@ -1,6 +1,7 @@
 package com.mrlaki5.mystockmanager.data.prefs
 
 import android.content.Context
+import com.mrlaki5.mystockmanager.generation.GenerationProvider
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.mrlaki5.mystockmanager.openai.OpenAiModel
@@ -43,6 +44,13 @@ class SecureKeyStore(context: Context) {
         set(value) = prefs.edit().putString(KEY_REASONING_EFFORT, value.apiValue).apply()
 
     val hasApiKey: Boolean get() = apiKey.isNotBlank()
+
+    var provider: GenerationProvider
+        get() = GenerationProvider.of(prefs.getString(KEY_PROVIDER, null).orEmpty())
+        set(value) = prefs.edit().putString(KEY_PROVIDER, value.id).apply()
+
+    /** On-device model downloads in flight, as "fileName=downloadId" pairs joined by commas. */
+    var modelDownloads: String by string(KEY_MODEL_DOWNLOADS)
 
     /** Blank means the built-in default, so prompt improvements still reach users who never edited it. */
     var systemPrompt: String by string(KEY_SYSTEM_PROMPT)
@@ -89,6 +97,8 @@ class SecureKeyStore(context: Context) {
         private const val KEY_MODEL = "openai_model"
         private const val KEY_REASONING_EFFORT = "openai_reasoning_effort"
         private const val KEY_SYSTEM_PROMPT = "openai_system_prompt"
+        private const val KEY_PROVIDER = "generation_provider"
+        private const val KEY_MODEL_DOWNLOADS = "on_device_model_downloads"
         private const val KEY_NC_SERVER = "nextcloud_server"
         private const val KEY_NC_LOGIN = "nextcloud_login"
         private const val KEY_NC_PASSWORD = "nextcloud_app_password"

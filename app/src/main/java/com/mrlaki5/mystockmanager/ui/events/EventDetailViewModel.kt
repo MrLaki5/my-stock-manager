@@ -9,8 +9,10 @@ import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
+import com.mrlaki5.mystockmanager.generation.GenerationProvider
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
 import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceModelStore
 import com.mrlaki5.mystockmanager.work.NetworkStatus
 import com.mrlaki5.mystockmanager.work.WorkScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,6 +30,7 @@ class EventDetailViewModel @Inject constructor(
     private val workScheduler: WorkScheduler,
     private val keyStore: SecureKeyStore,
     private val networkStatus: NetworkStatus,
+    private val modelStore: OnDeviceModelStore,
     nextcloud: NextcloudSettings,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -108,18 +111,28 @@ class EventDetailViewModel @Inject constructor(
     fun generateSelected(hint: String?) {
         val ids = _selection.value.toList()
         if (ids.isEmpty()) return
-        if (!keyStore.hasApiKey) {
-            _message.value = "Add your OpenAI API key in Settings first."
-            return
-        }
-        if (!networkStatus.isOnline()) {
-            _message.value = "No internet connection. Connect and try again."
-            return
+        val provider = keyStore.provider
+        when (provider) {
+            GenerationProvider.OPENAI -> {
+                if (!keyStore.hasApiKey) {
+                    _message.value = "Add your OpenAI API key in Settings first."
+                    return
+                }
+                if (!networkStatus.isOnline()) {
+                    _message.value = "No internet connection. Connect and try again."
+                    return
+                }
+            }
+            GenerationProvider.ON_DEVICE -> if (!modelStore.isReady) {
+                _message.value = "Download the on-device models in Settings first."
+                return
+            }
         }
         val trimmed = hint?.trim()?.takeIf { it.isNotEmpty() }
-        viewModelScope.launch { repository.setEventHint(eventId, trimmed) }
-
-        workScheduler.enqueueGeneration(ids, trimmed)
+        viewModelScope.launch {
+            repository.setEventHint(eventId, trimmed)
+            workScheduler.enqueueGeneration(ids, trimmed, provider)
+        }
         _selection.value = emptySet()
         _message.value = buildString {
             append("Queued ${ids.size} image${if (ids.size == 1) "" else "s"}")
