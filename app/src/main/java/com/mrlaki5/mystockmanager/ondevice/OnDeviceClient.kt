@@ -27,7 +27,7 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** LFM2.5-VL writes the caption and title; SigLIP 2 picks keywords, since small VLMs loop on long lists. */
+/** LFM2.5-VL writes the description, title, keywords and category, all in one conversation about the photo. */
 @Singleton
 class OnDeviceClient @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -36,13 +36,12 @@ class OnDeviceClient @Inject constructor(
     private val lock = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var engine: Engine? = null
-    private var tagger: KeywordTagger? = null
     private var releaseJob: Job? = null
 
-    suspend fun generate(models: OnDeviceFiles, imageJpeg: ByteArray, hint: String?): GenerationResult = lock.withLock {
+    suspend fun generate(model: File, imageJpeg: ByteArray, hint: String?): GenerationResult = lock.withLock {
         releaseJob?.cancel()
         try {
-            withContext(Dispatchers.IO) { run(models, imageJpeg, hint) }
+            withContext(Dispatchers.IO) { run(model, imageJpeg, hint) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: LinkageError) {
@@ -58,33 +57,14 @@ class OnDeviceClient @Inject constructor(
         }
     }
 
-    /** Frees the models' memory now, e.g. before their files are deleted. */
+    /** Frees the model's memory now, e.g. before its file is deleted. */
     suspend fun release() = lock.withLock {
         releaseJob?.cancel()
         closeAll()
     }
 
-    private fun run(models: OnDeviceFiles, imageJpeg: ByteArray, hint: String?): GenerationResult {
-        val (description, title) = caption(models.captioner, imageJpeg, hint)
-        if (description.isEmpty()) return GenerationResult.Terminal("The on-device model returned no description.")
-
-        val tags = taggerFor(models.tagger).tag(imageJpeg)
-        return GenerationResult.Success(
-            metadata = StockMetadata(
-                title = title,
-                description = description,
-                keywords = OnDeviceText.keywords(hint, description, title, tags).take(MAX_KEYWORDS),
-                category = tags.category,
-                secondaryCategory = null,
-            ).normalized(),
-            place = null,
-            promptTokens = null,
-            completionTokens = null,
-        )
-    }
-
-    // One conversation, so the photo is encoded once and the title is a cheap follow-up.
-    private fun caption(model: File, imageJpeg: ByteArray, hint: String?): Pair<String, String> {
+    // One conversation, so the photo is encoded once and every later question is a cheap follow-up.
+    private fun run(model: File, imageJpeg: ByteArray, hint: String?): GenerationResult {
         val config = ConversationConfig(
             samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = TEMPERATURE),
             maxOutputToken = MAX_OUTPUT_TOKENS,
@@ -94,8 +74,31 @@ class OnDeviceClient @Inject constructor(
                 Contents.of(Content.ImageBytes(imageJpeg), Content.Text(OnDeviceText.descriptionPrompt(hint)))
             ).toString()
             val description = OnDeviceText.sentence(described)
-            val titled = conversation.sendMessage(OnDeviceText.TITLE_PROMPT).toString()
-            description to OnDeviceText.title(titled, description, IPTC_OBJECT_NAME_MAX)
+            if (description.isEmpty()) return GenerationResult.Terminal("The on-device model returned no description.")
+            val title = OnDeviceText.title(conversation.sendMessage(OnDeviceText.TITLE_PROMPT).toString(), description, IPTC_OBJECT_NAME_MAX)
+
+            val keywords = mutableListOf<String>()
+            for (question in OnDeviceText.KEYWORD_QUESTIONS) {
+                if (keywords.size >= OnDeviceText.KEYWORD_TARGET) break
+                val answer = conversation.sendMessage(question, maxOutputToken = MAX_ANSWER_TOKENS).toString()
+                OnDeviceText.keyword(answer, keywords)?.let(keywords::add)
+            }
+            val category = OnDeviceText.category(
+                conversation.sendMessage(OnDeviceText.CATEGORY_PROMPT, maxOutputToken = MAX_ANSWER_TOKENS).toString()
+            )
+
+            GenerationResult.Success(
+                metadata = StockMetadata(
+                    title = title,
+                    description = description,
+                    keywords = OnDeviceText.keywords(hint, keywords).take(MAX_KEYWORDS),
+                    category = category,
+                    secondaryCategory = null,
+                ).normalized(),
+                place = null,
+                promptTokens = null,
+                completionTokens = null,
+            )
         }
     }
 
@@ -118,24 +121,21 @@ class OnDeviceClient @Inject constructor(
         }
     }
 
-    private fun taggerFor(model: File): KeywordTagger = tagger ?: KeywordTagger(context, model).also { tagger = it }
-
     private fun closeAll() {
         engine?.let { runCatching { it.close() } }
         engine = null
-        tagger?.let { runCatching { it.close() } }
-        tagger = null
     }
 
     private companion object {
-        // Long enough to keep the models loaded between images of one batch.
+        // Long enough to keep the model loaded between images of one batch.
         const val IDLE_RELEASE_MS = 60_000L
 
-        // 256 image tokens plus two short prompts and answers.
+        // 256 image tokens, the caption, and up to 17 short questions and answers.
         const val MAX_TOKENS = 2048
         const val MAX_OUTPUT_TOKENS = 120
+        const val MAX_ANSWER_TOKENS = 12
 
-        // Captioning wants the likeliest description, not variety.
+        // Metadata wants the likeliest answer, not variety.
         const val TEMPERATURE = 0.2
     }
 }

@@ -124,7 +124,7 @@ class EventDetailViewModel @Inject constructor(
                 }
             }
             GenerationProvider.ON_DEVICE -> if (!modelStore.isReady) {
-                _message.value = "Download the on-device models in Settings first."
+                _message.value = "Download the on-device model in Settings first."
                 return
             }
         }

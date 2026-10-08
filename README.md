@@ -53,7 +53,7 @@ Shutterstock already carries its metadata.
 MyStockManager never connects to Adobe Stock or Shutterstock. It has no agency login, stores no
 agency credentials, and does not submit, schedule or automate uploads. It talks to the OpenAI API,
 for metadata, unless you generate on the device; to Hugging Face, once, if you download the
-on-device models; and, only if you set up sync, to your own NextCloud server, as a backup copy of
+on-device model; and, only if you set up sync, to your own NextCloud server, as a backup copy of
 your events.
 
 All it prepares is files. Each event is its own folder under `Pictures/StockReady/`, so when you
@@ -73,30 +73,30 @@ Adobe Stock caps keywords at 49, Shutterstock at 50 with a minimum of 7. The app
 
 ## On-device generation
 
-Two small models run on the phone's CPU, about 10 seconds per image on a mid-range phone
-(the first image of a batch also loads the models, a few seconds more):
+One small model runs on the phone's CPU, about 15 seconds per image on a mid-range phone
+(the first image of a batch also loads the model, a few seconds more):
+[LFM2.5-VL-450M](https://huggingface.co/litert-community/LFM2.5-VL-450M) by Liquid AI, run with
+[LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM). It is under the
+[LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-VL-450M/blob/main/LICENSE),
+which is free to use, including commercially, below USD 10 million in annual revenue.
 
-- [LFM2.5-VL-450M](https://huggingface.co/litert-community/LFM2.5-VL-450M) by Liquid AI writes
-  the description, then the title as a follow-up in the same conversation, run with
-  [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM). It is under the
-  [LFM Open License v1.0](https://huggingface.co/LiquidAI/LFM2.5-VL-450M/blob/main/LICENSE),
-  which is free to use, including commercially, below USD 10 million in annual revenue.
-- [SigLIP 2](https://huggingface.co/litert-community/SigLIP2-base-patch16-224) by Google
-  (Apache-2.0) picks the keywords and the category. It ranks a built-in vocabulary of about
-  9,700 stock terms against the photo instead of writing keywords, because small vision
-  models loop on long keyword lists. Up to 20 keywords are kept: hint terms first, then words
-  from the description that SigLIP agrees with, then its ranking.
+Everything happens in one conversation about the photo, so the image is encoded only once. The
+model writes the description as a one-sentence stock caption, then the title, then answers one
+short question per keyword (main subject, other objects, setting, colour, light and so on) until
+it has 10 keywords, then picks a Shutterstock category from the fixed list. The app strips any
+talk about the photo itself ("The image shows...") and filler praise ("stunning", "serene") from
+the caption, so it only says what is in the picture. Asked for a whole keyword list, or for "one
+more keyword" again and again, a model this small starts repeating itself after a few words;
+one narrow question at a time avoids that. Hint terms come first in the keyword list.
 
-Both files (0.6 GB in total) are downloaded over Wi-Fi from Hugging Face when you ask for them
-in Settings, pinned to a fixed revision and checked against their SHA-256. The vocabulary ships
-in the app as `app/src/main/assets/keyword_index.bin`; see [tools/keywords](tools/keywords) to
-rebuild it. The text is simpler than OpenAI's, and the editable system prompt applies to OpenAI
-only.
+The file (0.4 GB) is downloaded over Wi-Fi from Hugging Face when you ask for it in Settings,
+pinned to a fixed revision and checked against its SHA-256. The text is simpler than OpenAI's,
+and the editable system prompt applies to OpenAI only.
 
 ## Build
 
 Generation uses either an OpenAI API key, entered in Settings - none is bundled - or the
-on-device models. Model is selectable between `gpt-6-luna` (default) and `gpt-6.1-sol`, with a
+on-device model. Model is selectable between `gpt-6-luna` (default) and `gpt-6.1-sol`, with a
 reasoning effort level. Without either, everything else works and metadata can be written by
 hand.
 

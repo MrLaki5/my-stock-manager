@@ -43,14 +43,14 @@ instead. When you do, nothing about that image is sent to OpenAI.
 ### On-device generation (optional)
 
 In Settings you can choose to generate metadata on your phone instead of with OpenAI. The
-app then downloads two models from Hugging Face (`huggingface.co`) once, when you tap
-Download: Liquid AI's LFM2.5-VL, which writes the title and description, and Google's
-SigLIP 2, which picks the keywords (about 0.6 GB together). Like any download, this request
-reveals your IP address to Hugging Face, but nothing about you or your photos is sent. After
-that, your photos and hints are processed entirely on your phone and never leave it.
+app then downloads one model from Hugging Face (`huggingface.co`) once, when you tap
+Download: Liquid AI's LFM2.5-VL, which writes the title, description, keywords and category
+(about 0.4 GB). Like any download, this request reveals your IP address to Hugging Face, but
+nothing about you or your photos is sent. After that, your photos and hints are processed
+entirely on your phone and never leave it.
 
-The model files are stored in the app's own storage, are excluded from backups, and are
-removed when you delete them in Settings or uninstall the app.
+The model file is stored in the app's own storage, is excluded from backups, and is removed
+when you delete it in Settings or uninstall the app.
 
 ### Photos and metadata synced to NextCloud (optional)
 
