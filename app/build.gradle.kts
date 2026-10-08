@@ -123,7 +123,6 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.reorderable)
     implementation(libs.litertlm.android)
-    implementation(libs.litert)
 
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver3)

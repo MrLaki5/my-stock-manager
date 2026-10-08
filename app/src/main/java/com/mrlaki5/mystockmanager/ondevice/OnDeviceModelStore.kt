@@ -22,10 +22,10 @@ import javax.inject.Singleton
 /** One downloadable model file, pinned to a commit so its checksum cannot drift. */
 data class ModelFile(val fileName: String, val sizeBytes: Long, val sha256: String, val url: String)
 
-/** The models the on-device provider runs: a small vision model for text, and an image tagger for keywords. */
+/** The small vision model the on-device provider runs for every metadata field. */
 object OnDeviceModel {
-    const val ID = "lfm2.5-vl-450m+siglip2"
-    const val LABEL = "LFM2.5-VL and SigLIP 2"
+    const val ID = "lfm2.5-vl-450m"
+    const val LABEL = "LFM2.5-VL"
     const val PAGE_URL = "https://huggingface.co/litert-community/LFM2.5-VL-450M"
 
     val CAPTIONER = ModelFile(
@@ -35,22 +35,12 @@ object OnDeviceModel {
         url = "https://huggingface.co/litert-community/LFM2.5-VL-450M/resolve/" +
             "eb997eadaef80e304343cec7a6181f170590278f/LFM2.5-VL-450M_int4_fixB.litertlm",
     )
-    val TAGGER = ModelFile(
-        fileName = "siglip2_base_224_fp16.tflite",
-        sizeBytes = 185_437_744L,
-        sha256 = "a30ebb7b3ee15eaa68a18f9ab6a2ed740c15c343d25d898dc482317473320854",
-        url = "https://huggingface.co/litert-community/SigLIP2-base-patch16-224/resolve/" +
-            "509b5cbcf1a849f37696be08f8297c6cd3050bf4/siglip2_base_224_fp16.tflite",
-    )
-    val FILES = listOf(CAPTIONER, TAGGER)
+    val FILES = listOf(CAPTIONER)
     val TOTAL_BYTES = FILES.sumOf { it.sizeBytes }
 
-    /** Below this the models still load, but Android is likely to kill them or everything else. */
+    /** Below this the model still loads, but Android is likely to kill it or everything else. */
     const val RECOMMENDED_RAM_BYTES = 4_000_000_000L
 }
-
-/** The installed, verified model files. */
-data class OnDeviceFiles(val captioner: File, val tagger: File)
 
 sealed interface ModelState {
     /** The runtimes ship only 64-bit native libraries. */
@@ -89,22 +79,23 @@ class OnDeviceModelStore @Inject constructor(
 
     private val refreshLock = Mutex()
 
-    /** The verified models, or null while any is missing. */
-    fun readyFiles(): OnDeviceFiles? {
-        val captioner = installed(OnDeviceModel.CAPTIONER) ?: return null
-        val tagger = installed(OnDeviceModel.TAGGER) ?: return null
-        return OnDeviceFiles(captioner, tagger)
+    init {
+        // Older versions also downloaded a keyword tagger; free its space without waiting for a new download.
+        if (pending().isEmpty()) dir?.let(::removeStaleFiles)
     }
 
-    val isReady: Boolean get() = isSupported && readyFiles() != null
+    /** The verified model, or null while it is missing. */
+    fun readyFile(): File? = installed(OnDeviceModel.CAPTIONER)
+
+    val isReady: Boolean get() = isSupported && readyFile() != null
 
     fun startDownload() {
-        if (!isSupported || readyFiles() != null || pending().isNotEmpty()) return
+        if (!isSupported || readyFile() != null || pending().isNotEmpty()) return
         val target = dir ?: return fail("Phone storage is not available.")
         removeStaleFiles(target)
         val missing = OnDeviceModel.FILES.filter { installed(it) == null }
         if (target.usableSpace < missing.sumOf { it.sizeBytes } + FREE_SPACE_MARGIN) {
-            return fail("Not enough free storage. The models need about ${"%.1f".format(OnDeviceModel.TOTAL_BYTES / 1e9)} GB.")
+            return fail("Not enough free storage. The model needs about ${"%.1f".format(OnDeviceModel.TOTAL_BYTES / 1e9)} GB.")
         }
 
         val ids = missing.associate { file ->
@@ -151,7 +142,12 @@ class OnDeviceModelStore @Inject constructor(
             var waitingForWifi = false
             val stillPending = pending.toMutableMap()
             for ((name, id) in pending) {
-                val file = OnDeviceModel.FILES.first { it.fileName == name }
+                // A download an older version started for a file this one no longer uses.
+                val file = OnDeviceModel.FILES.firstOrNull { it.fileName == name } ?: run {
+                    downloads.remove(id)
+                    stillPending.remove(name)
+                    continue
+                }
                 when (val progress = query(id)) {
                     null -> {
                         // Cancelled from the notification, or cleared by the system.
@@ -231,7 +227,7 @@ class OnDeviceModelStore @Inject constructor(
 
     private fun initialState(): ModelState = when {
         !isSupported -> ModelState.Unsupported
-        readyFiles() != null -> ModelState.Ready
+        readyFile() != null -> ModelState.Ready
         pending().isNotEmpty() -> ModelState.Downloading(0, OnDeviceModel.TOTAL_BYTES, waitingForWifi = false)
         else -> ModelState.Missing
     }

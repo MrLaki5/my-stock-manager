@@ -88,13 +88,13 @@ class GenerateMetadataWorker @AssistedInject constructor(
         imageDao.updateState(imageId, ImageState.GENERATING)
 
         val apiKey = keyStore.apiKey
-        val onDeviceModels = modelStore.readyFiles()
+        val onDeviceModel = modelStore.readyFile()
         when (provider) {
             GenerationProvider.OPENAI -> if (apiKey.isBlank()) {
                 return giveUp(imageId, "No OpenAI API key set. Add one in Settings.", stopsBatch = true)
             }
-            GenerationProvider.ON_DEVICE -> if (onDeviceModels == null) {
-                return giveUp(imageId, "The on-device models are not downloaded. Download them in Settings.", stopsBatch = true)
+            GenerationProvider.ON_DEVICE -> if (onDeviceModel == null) {
+                return giveUp(imageId, "The on-device model is not downloaded. Download it in Settings.", stopsBatch = true)
             }
         }
         val model = keyStore.model
@@ -114,7 +114,7 @@ class GenerateMetadataWorker @AssistedInject constructor(
                     val encoded = Base64.encodeToString(jpeg, Base64.NO_WRAP)
                     openAiClient.generate(apiKey, model.id, model.effective(keyStore.reasoningEffort), encoded, hint, systemPrompt)
                 }
-                GenerationProvider.ON_DEVICE -> onDeviceClient.generate(onDeviceModels!!, jpeg, hint)
+                GenerationProvider.ON_DEVICE -> onDeviceClient.generate(onDeviceModel!!, jpeg, hint)
             }
             return when (result) {
                 is GenerationResult.Transient -> if (runAttemptCount + 1 < MAX_ATTEMPTS) {

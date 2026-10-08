@@ -183,15 +183,15 @@ private fun OnDeviceSection(viewModel: SettingsViewModel) {
     val state by viewModel.modelState.collectAsStateWithLifecycle()
     var confirmingDelete by remember { mutableStateOf(false) }
 
-    SectionTitle("On-device models", OnDeviceModel.PAGE_URL, "About the on-device models")
+    SectionTitle("On-device model", OnDeviceModel.PAGE_URL, "About the on-device model")
     Hint(
-        "LFM2.5-VL by Liquid AI writes the title and description, and SigLIP 2 by Google picks the keywords. " +
-            "Both run on this phone: free, no account, and photos never leave the device. About 10 to 20 seconds " +
-            "per image; the text is simpler than OpenAI's."
+        "LFM2.5-VL by Liquid AI writes the title, description, keywords and category. " +
+            "It runs on this phone: free, no account, and photos never leave the device. About 10 to 20 seconds " +
+            "per image; the text is simpler than OpenAI's, with up to 10 keywords."
     )
     viewModel.lowMemoryGb?.let {
         Text(
-            "This phone has %.1f GB of memory. The models need about 1 GB of it and may be slow or fail here.".format(it),
+            "This phone has %.1f GB of memory. The model needs about 1 GB of it and may be slow or fail here.".format(it),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error,
         )
@@ -203,7 +203,7 @@ private fun OnDeviceSection(viewModel: SettingsViewModel) {
             style = MaterialTheme.typography.bodyMedium,
         )
         ModelState.Missing -> {
-            Button(onClick = viewModel::downloadModel) { Text("Download models (%.1f GB)".format(OnDeviceModel.TOTAL_BYTES / 1e9)) }
+            Button(onClick = viewModel::downloadModel) { Text("Download model (%.1f GB)".format(OnDeviceModel.TOTAL_BYTES / 1e9)) }
             Hint("Downloads once, over Wi-Fi only, from Hugging Face. LFM2.5-VL is under the LFM Open License.")
         }
         is ModelState.Downloading -> {
@@ -226,8 +226,8 @@ private fun OnDeviceSection(viewModel: SettingsViewModel) {
             Text("Checking the download…", style = MaterialTheme.typography.bodyMedium)
         }
         ModelState.Ready -> Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Models ready", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = { confirmingDelete = true }) { Text("Delete models") }
+            Text("Model ready", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { confirmingDelete = true }) { Text("Delete model") }
         }
         is ModelState.Failed -> {
             Text(current.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -238,8 +238,8 @@ private fun OnDeviceSection(viewModel: SettingsViewModel) {
     if (confirmingDelete) {
         AlertDialog(
             onDismissRequest = { confirmingDelete = false },
-            title = { Text("Delete models?") },
-            text = { Text("Frees %.1f GB. You will need to download them again to generate on this phone.".format(OnDeviceModel.TOTAL_BYTES / 1e9)) },
+            title = { Text("Delete model?") },
+            text = { Text("Frees %.1f GB. You will need to download it again to generate on this phone.".format(OnDeviceModel.TOTAL_BYTES / 1e9)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmingDelete = false

@@ -149,7 +149,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             onDeviceClient.release()
             modelStore.delete()
-            _message.value = "On-device models deleted"
+            _message.value = "On-device model deleted"
         }
     }
 

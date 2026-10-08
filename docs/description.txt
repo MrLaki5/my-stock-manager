@@ -3,7 +3,7 @@ MyStockManager prepares your photos for stock agencies such as Adobe Stock and S
 HOW IT WORKS
 • Create an event for each shoot, day or theme.
 • Import photos from your phone. Each event becomes its own album under Pictures/StockReady, so the shoot is grouped together in your gallery and in agency upload pickers. Your originals are never touched.
-• Select images and tap Generate. AI drafts a title, a description, keywords ordered by relevance, and a category. On-device models give up to 20 keywords.
+• Select images and tap Generate. AI drafts a title, a description, keywords ordered by relevance, and a category. The on-device model gives up to 10 keywords.
 • Add an optional hint for what the photo can't show, such as the place, subject or event.
 • Or write the metadata by hand. Open any image and type the title, description, keywords and category yourself.
 • Steer OpenAI with your own instructions. Edit the system prompt in Settings to change how titles, descriptions, keywords and categories are written, or reset it to the built-in default. The on-device models don't use it.
@@ -15,11 +15,11 @@ BUILT FOR STOCK WORK
 • Metadata is embedded without re-encoding. Pixels are left untouched, and every write is checked before the album file is replaced.
 • With OpenAI, captions lead with the place, when your hint names one, and the date taken.
 • Generation runs in the background, image by image, and retries network hiccups on its own.
-• If generation fails, for example because you're offline, your OpenAI credit runs out, your API key is rejected or the on-device models aren't downloaded, the app tells you why. Affected images go back to how they were, ready to try again.
+• If generation fails, for example because you're offline, your OpenAI credit runs out, your API key is rejected or the on-device model isn't downloaded, the app tells you why. Affected images go back to how they were, ready to try again.
 
 ON-DEVICE GENERATION (OPTIONAL)
-• Generate with no API key and no cost. Two small models run on your phone, about 10 seconds per image on a mid-range phone.
-• Download them once in Settings (about 0.6 GB, from Hugging Face over Wi-Fi) and delete them any time.
+• Generate with no API key and no cost. A small model runs on your phone, about 13 seconds per image on a mid-range phone.
+• Download it once in Settings (about 0.4 GB, from Hugging Face over Wi-Fi) and delete it any time.
 • Photos and hints never leave your phone. The text is simpler than OpenAI's, so review it with care.
 
 OPTIONAL NEXTCLOUD BACKUP
@@ -33,7 +33,7 @@ YOU STAY IN CONTROL
 • Open source under the MIT license. Code and issues at https://github.com/MrLaki5/my-stock-manager
 
 REQUIREMENTS
-• For AI drafting, either the on-device models (0.6 GB download, 64-bit ARM phone) or your own OpenAI API key, entered in Settings. OpenAI bills your API account for what you use. gpt-6-luna is much cheaper per image; gpt-6.1-sol gives stronger keywords. Higher reasoning costs more and is slower. With neither, you can still write all the metadata by hand.
+• For AI drafting, either the on-device model (0.4 GB download, 64-bit ARM phone) or your own OpenAI API key, entered in Settings. OpenAI bills your API account for what you use. gpt-6-luna is much cheaper per image; gpt-6.1-sol gives stronger keywords. Higher reasoning costs more and is slower. With neither, you can still write all the metadata by hand.
 • JPEG photos.
 • Android 10 or later.
 

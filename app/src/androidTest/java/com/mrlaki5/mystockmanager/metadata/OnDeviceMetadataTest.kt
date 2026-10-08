@@ -1,6 +1,7 @@
 package com.mrlaki5.mystockmanager.metadata
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
@@ -34,7 +35,7 @@ class OnDeviceMetadataTest {
     @Test
     fun embedsAndReadsBackOnArt() {
         val source = sourceJpeg("art-source.jpg")
-        val destination = File(store.exports, "art-out.jpg")
+        val destination = store.newTempFile("art-out")
         val metadata = sampleMetadata(40)
 
         writer.embed(source, destination, metadata)
@@ -61,25 +62,26 @@ class OnDeviceMetadataTest {
     }
 
     @Test
-    fun downscalesAndBase64EncodesForTheVisionCall() {
+    fun downscalesForTheVisionModels() {
         val source = sourceJpeg("encode-source.jpg", width = 4000, height = 3000)
-        val encoded = ImageEncoder.toBase64Jpeg(source)
-        assertTrue("suspiciously small payload", encoded.length > 1000)
+        val jpeg = ImageEncoder.toJpeg(source)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, bounds)
         // A 4000x3000 frame must not be sent at full size.
-        assertTrue("payload not downscaled: ${encoded.length}", encoded.length < 900_000)
+        assertTrue("not downscaled: ${bounds.outWidth}x${bounds.outHeight}", maxOf(bounds.outWidth, bounds.outHeight) <= 1024)
+        assertTrue("suspiciously small image: ${bounds.outWidth}x${bounds.outHeight}", bounds.outWidth >= 512)
     }
 
     @Test
     fun publishesEachEventAsItsOwnPickerAlbum() {
         val source = sourceJpeg("mediastore-source.jpg")
-        val destination = File(store.exports, "mediastore-out.jpg")
+        val destination = store.newTempFile("mediastore-out")
         writer.embed(source, destination, sampleMetadata(10))
 
         val exporter = MediaStoreExporter(context)
-        val events = listOf("Harbour Shoot", "Autumn Market")
-        val uris = events.map { event ->
-            exporter.export(destination, "phase0-$event-${System.currentTimeMillis()}.jpg", event)
-        }
+        val stamp = System.currentTimeMillis()
+        val events = listOf("Test Harbour $stamp", "Test Market $stamp")
+        val uris = events.map { event -> exporter.publish(destination, "test-$stamp.jpg", event) }
 
         uris.forEach { uri ->
             context.contentResolver.openInputStream(uri).use { input ->
@@ -90,26 +92,30 @@ class OnDeviceMetadataTest {
         // The Photo Picker groups albums by BUCKET_DISPLAY_NAME. Assert what it will
         // actually show, rather than assuming the nesting under StockReady survives.
         val buckets = uris.map { bucketDisplayNameOf(it) }
-        events.forEach { event ->
-            val expected = MediaStoreExporter.albumNameFor(event)
-            assertTrue("expected album '$expected', got $buckets", buckets.contains(expected))
+        try {
+            events.forEach { event ->
+                val expected = MediaStoreExporter.albumNameFor(event)
+                assertTrue("expected album '$expected', got $buckets", buckets.contains(expected))
+            }
+        } finally {
+            // This runs on real phones; leaving test albums would clutter the user's gallery and upload pickers.
+            uris.forEach { exporter.delete(it) }
         }
-
-        // Deliberately left in place so the albums can be eyeballed in a real picker.
     }
 
     @Test
-    fun deletesAnEntireEventAlbum() {
+    fun deletesEveryImageInAnEventAlbum() {
         val source = sourceJpeg("delete-source.jpg")
-        val destination = File(store.exports, "delete-out.jpg")
+        val destination = store.newTempFile("delete-out")
         writer.embed(source, destination, sampleMetadata(8))
 
         val exporter = MediaStoreExporter(context)
-        val event = "Disposable Event"
-        exporter.export(destination, "disposable-${System.currentTimeMillis()}.jpg", event)
-        assertTrue("nothing published", exporter.listEvent(event).isNotEmpty())
+        val event = "Test Disposable ${System.currentTimeMillis()}"
+        exporter.publish(destination, "disposable.jpg", event)
+        val listed = exporter.listEvent(event)
+        assertTrue("nothing published", listed.isNotEmpty())
 
-        exporter.deleteEvent(event)
+        listed.forEach { exporter.delete(it) }
         assertEquals(emptyList<Any>(), exporter.listEvent(event))
     }
 
@@ -128,7 +134,7 @@ class OnDeviceMetadataTest {
     ).normalized()
 
     private fun sourceJpeg(name: String, width: Int = 640, height: Int = 480): File {
-        val file = File(store.originals, name)
+        val file = store.newTempFile(name.removeSuffix(".jpg"))
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         // Noise, not flat colour: a uniform image compresses to almost nothing and
         // would make the downscale assertion meaningless.
