@@ -13,6 +13,27 @@ class OnDeviceTextTest {
     }
 
     @Test
+    fun `sentence drops talk about the photo itself`() {
+        assertEquals("A dirt path through a forest.", OnDeviceText.sentence("The image shows a dirt path through a forest."))
+        assertEquals("A bustling cityscape at night.", OnDeviceText.sentence("The image captures a bustling cityscape at night."))
+        assertEquals("The car is a vintage Plymouth.", OnDeviceText.sentence("The car in the image is a vintage Plymouth."))
+        assertEquals("The sky is blue.", OnDeviceText.sentence("The sky is blue in the photo."))
+        assertEquals("Two gulls fly over the sea.", OnDeviceText.sentence("In this photo, two gulls fly over the sea."))
+        assertEquals("A black and white photo of a pier.", OnDeviceText.sentence("A black and white photo of a pier."))
+        assertEquals("The Statue of Liberty under a blue sky.", OnDeviceText.sentence("A photo of the Statue of Liberty under a blue sky."))
+    }
+
+    @Test
+    fun `sentence drops filler praise and fixes the article`() {
+        assertEquals("A sunset over a mountain with clouds and a lake.", OnDeviceText.sentence("A stunning sunset over a mountain with clouds and a lake."))
+        assertEquals("An ocean view at dusk.", OnDeviceText.sentence("A serene ocean view at dusk."))
+        assertEquals("A landscape with rolling hills.", OnDeviceText.sentence("An idyllic landscape with rolling hills."))
+        assertEquals("Two hikers stand below mountains.", OnDeviceText.sentence("Two hikers stand below majestic mountains."))
+        assertEquals("A winding road with a sunset behind it.", OnDeviceText.sentence("A winding road with a beautiful sunset behind it."))
+        assertEquals("The lake is calm.", OnDeviceText.sentence("The lake is calm."))
+    }
+
+    @Test
     fun `title is cleaned, or cut from the description when unusable`() {
         assertEquals("Dog in cone", OnDeviceText.title("Title: \"Dog in cone.\"", "A dog wears a cone.", 64))
         assertEquals("Dog wearing a white shirt", OnDeviceText.title("", "A dog wearing a white shirt.", 64))

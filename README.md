@@ -73,7 +73,7 @@ Adobe Stock caps keywords at 49, Shutterstock at 50 with a minimum of 7. The app
 
 ## On-device generation
 
-One small model runs on the phone's CPU, about 13 seconds per image on a mid-range phone
+One small model runs on the phone's CPU, about 15 seconds per image on a mid-range phone
 (the first image of a batch also loads the model, a few seconds more):
 [LFM2.5-VL-450M](https://huggingface.co/litert-community/LFM2.5-VL-450M) by Liquid AI, run with
 [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM). It is under the
@@ -81,9 +81,11 @@ One small model runs on the phone's CPU, about 13 seconds per image on a mid-ran
 which is free to use, including commercially, below USD 10 million in annual revenue.
 
 Everything happens in one conversation about the photo, so the image is encoded only once. The
-model writes the description, then the title, then answers one short question per keyword
-(main subject, other objects, setting, colour, light and so on) until it has 10 keywords, then
-picks a Shutterstock category from the fixed list. Asked for a whole keyword list, or for "one
+model writes the description as a one-sentence stock caption, then the title, then answers one
+short question per keyword (main subject, other objects, setting, colour, light and so on) until
+it has 10 keywords, then picks a Shutterstock category from the fixed list. The app strips any
+talk about the photo itself ("The image shows...") and filler praise ("stunning", "serene") from
+the caption, so it only says what is in the picture. Asked for a whole keyword list, or for "one
 more keyword" again and again, a model this small starts repeating itself after a few words;
 one narrow question at a time avoids that. Hint terms come first in the keyword list.
 

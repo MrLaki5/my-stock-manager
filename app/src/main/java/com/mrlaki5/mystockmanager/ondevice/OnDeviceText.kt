@@ -7,19 +7,38 @@ object OnDeviceText {
 
     const val TITLE_PROMPT = "Now write a short title for this photo, at most 10 words. Return only the title."
 
-    // Short and literal: a 450M model follows one plain instruction far better than a style guide.
+    // Short and literal: a 450M model follows one plain instruction far better than a style guide. Asked to
+    // "describe what is visible", it says "The image shows..." in a third of answers; a caption names the subject.
     fun descriptionPrompt(hint: String?): String = buildString {
-        append("Describe what is visible in this photo in one factual sentence. Return only the sentence.")
+        append("Write a one-sentence stock photo caption for this photo. Return only the caption.")
         if (!hint.isNullOrBlank()) append(" Context from the photographer: ${hint.trim()}.")
     }
 
-    /** The first sentence of the answer, without labels or quotes. */
+    /** The first sentence of the answer, without labels, quotes, talk about the photo itself or filler praise. */
     fun sentence(raw: String): String {
         val line = clean(raw, "description")
         val end = Regex("""[.!?](\s|$)""").find(line)?.range?.first
-        val first = if (end != null) line.substring(0, end + 1) else line
+        val first = withoutFiller(withoutPhotoTalk(if (end != null) line.substring(0, end + 1) else line))
         return if (first.isEmpty() || first.last() in ".!?") first else "$first."
     }
+
+    // "The image shows a car in the photo." says nothing a buyer needs; keep only the content.
+    private fun withoutPhotoTalk(sentence: String): String = sentence
+        .replaceFirst(Regex("""^(in|on) (this|the) $PHOTO,?\s+""", RegexOption.IGNORE_CASE), "")
+        .replaceFirst(Regex("""^(this|the) $PHOTO (shows|features|captures|depicts|displays|contains|presents)\s+""", RegexOption.IGNORE_CASE), "")
+        .replaceFirst(Regex("""^an? $PHOTO of\s+""", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("""\s+(in|of) (this|the) $PHOTO\b""", RegexOption.IGNORE_CASE), "")
+        .replaceFirstChar { it.uppercase() }
+
+    // "A stunning sunset" -> "A sunset"; the article is redone since the next word may start differently.
+    private fun withoutFiller(sentence: String): String =
+        Regex("""\b(?:(an?)\s+)?$FILLER\s+(?=([a-z]))""", RegexOption.IGNORE_CASE).replace(sentence) { match ->
+            val article = match.groupValues[1]
+            if (article.isEmpty()) return@replace ""
+            val an = match.groupValues[3].lowercase() in "aeiou"
+            val word = if (an) "an" else "a"
+            (if (article[0].isUpperCase()) word.replaceFirstChar { it.uppercase() } else word) + " "
+        }
 
     /** The model's title, or one cut from the description when it gave none that fits. */
     fun title(raw: String, description: String, maxLength: Int): String {
@@ -116,6 +135,9 @@ object OnDeviceText {
         return cut.trimEnd(',', ' ').ifEmpty { text.take(maxLength) }
     }
 
+    private const val PHOTO = "(image|photo|picture|photograph)"
+    private const val FILLER = "(stunning|serene|beautiful|breathtaking|majestic|picturesque|idyllic|gorgeous|tranquil|" +
+        "surreal|magnificent|spectacular|captivating|enchanting)"
     private val NON_ANSWERS = setOf("none", "no", "yes", "unknown", "not", "nothing")
     private val SHORT_WORDS = setOf("of", "on", "in", "at", "to")
 

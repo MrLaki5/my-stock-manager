@@ -18,7 +18,7 @@ BUILT FOR STOCK WORK
 • If generation fails, for example because you're offline, your OpenAI credit runs out, your API key is rejected or the on-device model isn't downloaded, the app tells you why. Affected images go back to how they were, ready to try again.
 
 ON-DEVICE GENERATION (OPTIONAL)
-• Generate with no API key and no cost. A small model runs on your phone, about 13 seconds per image on a mid-range phone.
+• Generate with no API key and no cost. A small model runs on your phone, about 15 seconds per image on a mid-range phone.
 • Download it once in Settings (about 0.4 GB, from Hugging Face over Wi-Fi) and delete it any time.
 • Photos and hints never leave your phone. The text is simpler than OpenAI's, so review it with care.
 
