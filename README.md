@@ -1,4 +1,4 @@
-<img src="docs/feature-graphic-1024x500.png" alt="MyStockManager - metadata for a whole shoot, written by AI">
+<img src="docs/feature-graphic-1024x500.png" alt="MyStockManager - microstock keywords for a whole shoot, generated on your phone">
 
 # MyStockManager
 
@@ -9,11 +9,12 @@ Shutterstock already carries its metadata.
 <a href="https://play.google.com/store/apps/details?id=com.mrlaki5.mystockmanager"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80"></a>
 
 <p>
-  <img src="docs/screenshot-1.png" alt="Event with every image generated" width="19%">
-  <img src="docs/screenshot-2.png" alt="Events list" width="19%">
-  <img src="docs/screenshot-3.png" alt="Title and description editor with character counts" width="19%">
-  <img src="docs/screenshot-4.png" alt="Keywords and caption saved in the file" width="19%">
-  <img src="docs/screenshot-5.png" alt="Settings with the OpenAI API key and NextCloud sync" width="19%">
+  <img src="docs/screenshot-1.png" alt="Event with every image generated" width="16%">
+  <img src="docs/screenshot-2.png" alt="On-device generation in Settings: free, no API key" width="16%">
+  <img src="docs/screenshot-3.png" alt="Keywords and caption saved in the file" width="16%">
+  <img src="docs/screenshot-4.png" alt="Title and description editor with character counts" width="16%">
+  <img src="docs/screenshot-5.png" alt="Events list" width="16%">
+  <img src="docs/screenshot-6.png" alt="Optional NextCloud sync in Settings" width="16%">
 </p>
 
 ## What it does
