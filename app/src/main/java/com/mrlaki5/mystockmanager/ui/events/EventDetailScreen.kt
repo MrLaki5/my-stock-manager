@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.ui.events
 
+import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,9 +62,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.net.toUri
 import coil.compose.AsyncImage
+import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
+import com.mrlaki5.mystockmanager.ui.components.AlbumBadge
 import com.mrlaki5.mystockmanager.ui.components.CloudBadge
 import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
 
@@ -81,6 +84,8 @@ fun EventDetailScreen(
     val message by viewModel.message.collectAsStateWithLifecycle()
     val syncEnabled by viewModel.syncEnabled.collectAsStateWithLifecycle()
     val cloudMarks by viewModel.cloudMarks.collectAsStateWithLifecycle()
+    val trashRequest by viewModel.trashRequest.collectAsStateWithLifecycle()
+    val trashPrompt by viewModel.trashPrompt.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(message) {
@@ -96,6 +101,25 @@ fun EventDetailScreen(
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(MAX_PICK)
     ) { uris -> viewModel.importImages(uris) }
+
+    val trashConfirm = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result -> viewModel.onTrashResult(result.resultCode == Activity.RESULT_OK) }
+
+    LaunchedEffect(trashRequest) {
+        trashRequest?.let {
+            viewModel.onTrashRequestShown()
+            trashConfirm.launch(it)
+        }
+    }
+
+    trashPrompt?.let { count ->
+        RemoveOriginalsDialog(
+            count = count,
+            onKeep = { viewModel.answerTrashPrompt(remove = false) },
+            onRemove = { viewModel.answerTrashPrompt(remove = true) },
+        )
+    }
 
     if (askingHint) {
         HintDialog(
@@ -199,8 +223,11 @@ fun EventDetailScreen(
                                 // Tap opens the image; it only toggles once a selection
                                 // is already running, so the multi-select flow survives.
                                 onClick = {
-                                    if (selection.isEmpty()) onOpenImage(image.id)
-                                    else viewModel.toggleSelection(image.id)
+                                    when {
+                                        selection.isNotEmpty() -> viewModel.toggleSelection(image.id)
+                                        image.albumState == AlbumState.TRASHED -> viewModel.restore(image.id)
+                                        else -> onOpenImage(image.id)
+                                    }
                                 },
                                 onLongClick = { viewModel.toggleSelection(image.id) },
                             )
@@ -258,15 +285,17 @@ private fun StatusSummary(
 ) {
     val generated = images.count { it.state == ImageState.GENERATED }
     val pending = images.count {
-        it.state == ImageState.FILED || it.state == ImageState.GENERATION_FAILED
+        it.albumState == AlbumState.PRESENT &&
+            (it.state == ImageState.FILED || it.state == ImageState.GENERATION_FAILED)
     }
+    val trashed = images.count { it.albumState == AlbumState.TRASHED }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                "$generated of ${images.size} generated",
+                "$generated of ${images.size} generated" + if (trashed > 0) " · $trashed in trash" else "",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
@@ -304,17 +333,23 @@ private fun ImageCell(
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
+        val present = image.albumState == AlbumState.PRESENT
         AsyncImage(
             model = image.mediaStoreUri?.toUri(),
             contentDescription = image.displayName,
             contentScale = ContentScale.Crop,
+            alpha = if (present) 1f else 0.35f,
             modifier = Modifier.fillMaxSize(),
         )
 
-        ImageStateBadge(
-            state = image.state,
-            modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
-        )
+        if (present) {
+            ImageStateBadge(
+                state = image.state,
+                modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
+            )
+        } else {
+            AlbumBadge(image, Modifier.align(Alignment.Center).padding(4.dp))
+        }
 
         cloud?.let { CloudBadge(it, Modifier.align(Alignment.TopStart).padding(4.dp)) }
 
@@ -366,6 +401,23 @@ private fun SelectionBar(count: Int, onDelete: () -> Unit, onGenerate: () -> Uni
 }
 
 @Composable
+private fun RemoveOriginalsDialog(count: Int, onKeep: () -> Unit, onRemove: () -> Unit) {
+    val photos = if (count == 1) "photo" else "$count photos"
+    AlertDialog(
+        onDismissRequest = onKeep,
+        title = { Text("Remove the originals?") },
+        text = {
+            Text(
+                "The $photos you imported are now in the StockReady album. Move the originals " +
+                    "to the trash so your gallery doesn't show them twice?"
+            )
+        },
+        confirmButton = { TextButton(onClick = onRemove) { Text("Move to trash") } },
+        dismissButton = { TextButton(onClick = onKeep) { Text("Keep") } },
+    )
+}
+
+@Composable
 private fun DeleteDialog(count: Int, syncEnabled: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -401,7 +453,7 @@ private fun EmptyEvent(modifier: Modifier = Modifier) {
             Text(
                 "Add images to this event. They are copied into the StockReady album, " +
                     "visible in your gallery and in upload pickers right away. Your camera " +
-                    "roll is left untouched.",
+                    "roll is left untouched unless Settings → Remove originals after import is on.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

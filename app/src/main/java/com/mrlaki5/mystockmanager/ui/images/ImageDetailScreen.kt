@@ -63,6 +63,7 @@ import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
@@ -70,6 +71,7 @@ import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
 import com.mrlaki5.mystockmanager.ui.components.CloudBadge
 import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
+import com.mrlaki5.mystockmanager.ui.components.albumLabel
 import com.mrlaki5.mystockmanager.ui.components.label
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -175,6 +177,14 @@ fun ImageDetailScreen(
 
             Preview(current)
 
+            current.albumLabel()?.let { label ->
+                AlbumBanner(
+                    label = label,
+                    trashed = current.albumState == AlbumState.TRASHED,
+                    onRestore = viewModel::restore,
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp, 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -219,6 +229,27 @@ fun ImageDetailScreen(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun AlbumBanner(label: String, trashed: Boolean, onRestore: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                Text(
+                    if (trashed) "Deleted outside the app. It is removed from here too once the trash empties."
+                    else "The file was removed outside the app. Pull from NextCloud can bring it back if it was synced.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+            if (trashed) TextButton(onClick = onRestore) { Text("Restore") }
         }
     }
 }

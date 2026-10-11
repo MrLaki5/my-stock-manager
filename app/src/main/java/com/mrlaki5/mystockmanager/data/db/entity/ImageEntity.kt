@@ -27,6 +27,17 @@ enum class ImageState {
     GENERATION_FAILED,
 }
 
+/** What MediaStore says about the album file, refreshed by `AlbumWatcher`. */
+enum class AlbumState {
+    PRESENT,
+
+    /** In the system trash, e.g. deleted from the gallery; the app can still restore it. */
+    TRASHED,
+
+    /** Gone without ever being seen in the trash, so the row is kept rather than guessed away. */
+    MISSING,
+}
+
 @Entity(
     tableName = "images",
     foreignKeys = [
@@ -77,4 +88,7 @@ data class ImageEntity(
     val captionPlace: String? = null,
     /** Bumped each time the album file is rewritten, so sync knows the cloud copy is stale. */
     @ColumnInfo(defaultValue = "1") val fileVersion: Long = 1,
+    @ColumnInfo(defaultValue = "PRESENT") val albumState: AlbumState = AlbumState.PRESENT,
+    /** When the system trash purges the file; null unless [albumState] is TRASHED and the trash said. */
+    val trashExpiresAt: Long? = null,
 )

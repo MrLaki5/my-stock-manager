@@ -185,7 +185,7 @@ abstract class SyncDao : SyncStore {
         JOIN folders f ON f.id = i.folderId
         JOIN sync_folders sf ON sf.folderId = f.id AND sf.localName = f.name
         LEFT JOIN sync_images s ON s.imageId = i.id
-        WHERE i.mediaStoreUri IS NOT NULL AND $DIRTY
+        WHERE i.mediaStoreUri IS NOT NULL AND i.albumState = 'PRESENT' AND $DIRTY
         ORDER BY i.id
         LIMIT 1
         """
@@ -296,7 +296,7 @@ abstract class SyncDao : SyncStore {
                 "+ (SELECT COUNT(*) FROM folders f LEFT JOIN sync_folders sf ON sf.folderId = f.id " +
                 "WHERE sf.folderId IS NULL OR sf.localName != f.name) " +
                 "+ (SELECT COUNT(*) FROM images i LEFT JOIN sync_images s ON s.imageId = i.id " +
-                "WHERE i.folderId IS NOT NULL AND i.mediaStoreUri IS NOT NULL AND $DIRTY) AS pending, " +
+                "WHERE i.folderId IS NOT NULL AND i.mediaStoreUri IS NOT NULL AND i.albumState = 'PRESENT' AND $DIRTY) AS pending, " +
                 "(SELECT COUNT(*) FROM images i JOIN sync_images s ON s.imageId = i.id " +
                 "WHERE s.failedVersion = i.fileVersion) AS failed"
     }

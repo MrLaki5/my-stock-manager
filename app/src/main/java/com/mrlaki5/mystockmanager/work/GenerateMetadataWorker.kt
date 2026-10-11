@@ -7,6 +7,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
+import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
 import com.mrlaki5.mystockmanager.generation.GenerationProvider
@@ -81,6 +82,9 @@ class GenerateMetadataWorker @AssistedInject constructor(
         val image = imageDao.getById(imageId) ?: return Result.failure()
         val mediaUri = image.mediaStoreUri?.toUri()
             ?: return giveUp(imageId, "Image is not in the album")
+        if (image.albumState == AlbumState.TRASHED) {
+            return giveUp(imageId, "Image is in the trash. Tap it in the event to restore it first.")
+        }
         if (!mediaStore.exists(mediaUri)) {
             return giveUp(imageId, "Image was removed from the album")
         }

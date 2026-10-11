@@ -16,7 +16,13 @@ import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 
-data class ImportSummary(val imported: Int, val duplicates: Int, val failed: Int) {
+/** [importedSources] are the picked URIs that became new album copies, for trashing their originals. */
+data class ImportSummary(
+    val imported: Int,
+    val duplicates: Int,
+    val failed: Int,
+    val importedSources: List<Uri> = emptyList(),
+) {
     val total: Int get() = imported + duplicates + failed
 }
 
@@ -25,7 +31,8 @@ data class ImportSummary(val imported: Int, val duplicates: Int, val failed: Int
  * gallery and in every file picker immediately — there is no separate private copy and
  * no later "publish" step to forget.
  *
- * The source in the camera roll is opened read-only and never modified.
+ * The source in the camera roll is opened read-only here; trashing it afterwards is the
+ * caller's opt-in step, see [OriginalTrash].
  *
  * Runs while the caller still holds the URI grant: grants from a share intent are
  * transient, so this must not be deferred to a background worker holding raw URIs.
@@ -40,18 +47,18 @@ class ImportCopier @Inject constructor(
 
     suspend fun import(uris: List<Uri>, folderId: Long, eventName: String): ImportSummary =
         withContext(Dispatchers.IO) {
-            var imported = 0
+            val imported = mutableListOf<Uri>()
             var duplicates = 0
             var failed = 0
 
             for (uri in uris) {
                 when (importOne(uri, folderId, eventName)) {
-                    Outcome.IMPORTED -> imported++
+                    Outcome.IMPORTED -> imported += uri
                     Outcome.DUPLICATE -> duplicates++
                     Outcome.FAILED -> failed++
                 }
             }
-            ImportSummary(imported, duplicates, failed)
+            ImportSummary(imported.size, duplicates, failed, imported)
         }
 
     private enum class Outcome { IMPORTED, DUPLICATE, FAILED }
