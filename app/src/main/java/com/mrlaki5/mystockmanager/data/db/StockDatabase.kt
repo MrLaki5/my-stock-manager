@@ -23,7 +23,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.SyncImageEntity
         SyncImageEntity::class,
         RemoteDeletionEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -104,6 +104,14 @@ abstract class StockDatabase : RoomDatabase() {
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE images ADD COLUMN captionPlace TEXT")
+            }
+        }
+
+        /** Adds the album file's trash state, which the startup check fills in. */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE images ADD COLUMN albumState TEXT NOT NULL DEFAULT 'PRESENT'")
+                db.execSQL("ALTER TABLE images ADD COLUMN trashExpiresAt INTEGER")
             }
         }
     }

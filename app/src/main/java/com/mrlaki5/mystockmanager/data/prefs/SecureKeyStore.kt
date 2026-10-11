@@ -62,6 +62,8 @@ class SecureKeyStore(context: Context) {
     var nextcloudUserId: String by string(KEY_NC_USER_ID)
     var nextcloudRoot: String by string(KEY_NC_ROOT)
 
+    var trashOriginalsAfterImport: Boolean by boolean(KEY_TRASH_ORIGINALS, default = false)
+
     var syncEnabled: Boolean by boolean(KEY_SYNC_ENABLED, default = false)
     var syncWifiOnly: Boolean by boolean(KEY_SYNC_WIFI_ONLY, default = true)
 
@@ -104,6 +106,7 @@ class SecureKeyStore(context: Context) {
         private const val KEY_NC_PASSWORD = "nextcloud_app_password"
         private const val KEY_NC_USER_ID = "nextcloud_user_id"
         private const val KEY_NC_ROOT = "nextcloud_root"
+        private const val KEY_TRASH_ORIGINALS = "trash_originals_after_import"
         private const val KEY_SYNC_ENABLED = "sync_enabled"
         private const val KEY_SYNC_WIFI_ONLY = "sync_wifi_only"
         private const val KEY_SYNC_TARGET = "sync_target_key"

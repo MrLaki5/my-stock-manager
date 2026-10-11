@@ -200,6 +200,12 @@ class ImageDetailViewModel @Inject constructor(
         }
     }
 
+    fun restore() {
+        viewModelScope.launch {
+            _message.value = if (repository.restoreFromTrash(imageId)) "Restored from trash" else "Could not restore this image"
+        }
+    }
+
     fun consumeMessage() {
         _message.value = null
     }

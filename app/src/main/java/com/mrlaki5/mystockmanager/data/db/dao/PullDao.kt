@@ -140,7 +140,8 @@ abstract class PullDao : PullStore {
             capturedOn = :capturedOn, state = :state, title = :title, description = :description,
             captionPlace = :captionPlace,
             keywords = :keywords, category = :category, generatedAt = :generatedAt,
-            mediaStoreUri = :mediaStoreUri, generationError = NULL, fileVersion = fileVersion + 1
+            mediaStoreUri = :mediaStoreUri, generationError = NULL, fileVersion = fileVersion + 1,
+            albumState = 'PRESENT', trashExpiresAt = NULL
         WHERE id = :id
         """
     )

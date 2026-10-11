@@ -112,6 +112,9 @@ fun SettingsScreen(
             }
 
             HorizontalDivider()
+            ImportSection(viewModel)
+
+            HorizontalDivider()
             NextcloudSection(viewModel)
 
             HorizontalDivider()
@@ -304,6 +307,20 @@ private fun PromptSection(viewModel: SettingsViewModel) {
             dismissButton = { TextButton(onClick = { confirmingReset = false }) { Text("Cancel") } },
         )
     }
+}
+
+@Composable
+private fun ImportSection(viewModel: SettingsViewModel) {
+    val trashOriginals by viewModel.trashOriginals.collectAsStateWithLifecycle()
+    Text("Import", style = MaterialTheme.typography.titleMedium)
+    SwitchRow(
+        title = "Remove originals after import",
+        subtitle = if (viewModel.canTrashOriginals) "Avoids duplicates in your gallery. Restorable from its trash for 30 days."
+        else "Needs Android 11 or newer.",
+        checked = trashOriginals && viewModel.canTrashOriginals,
+        enabled = viewModel.canTrashOriginals,
+        onCheckedChange = viewModel::setTrashOriginals,
+    )
 }
 
 @Composable

@@ -1,11 +1,13 @@
 package com.mrlaki5.mystockmanager.data.repository
 
 import android.net.Uri
+import android.os.Build
 import androidx.core.net.toUri
 import com.mrlaki5.mystockmanager.data.db.dao.FolderDao
 import com.mrlaki5.mystockmanager.data.db.dao.FolderSummary
 import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
 import com.mrlaki5.mystockmanager.data.db.dao.SyncDao
+import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
@@ -196,6 +198,15 @@ class StockRepository @Inject constructor(
     private fun removeAlbumCopy(image: ImageEntity): Boolean {
         val uri = image.mediaStoreUri?.toUri() ?: return true
         return runCatching { mediaStore.delete(uri) }.isSuccess
+    }
+
+    /** Takes an image the gallery moved to the trash back out of it; false if it could not be restored. */
+    suspend fun restoreFromTrash(imageId: Long): Boolean = withContext(Dispatchers.IO) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return@withContext false
+        val uri = imageDao.getById(imageId)?.mediaStoreUri?.toUri() ?: return@withContext false
+        val restored = runCatching { mediaStore.restore(uri) }.getOrDefault(false)
+        if (restored) imageDao.setAlbumState(imageId, AlbumState.PRESENT, null)
+        restored
     }
 
     suspend fun importInto(folderId: Long, uris: List<Uri>): ImportSummary {

@@ -22,8 +22,13 @@ Shutterstock already carries its metadata.
 - **Organises shoots into events** - one event per shoot, day or theme.
 - **Imports straight into the album.** Picked images are copied to
   `Pictures/StockReady/StockReady - <event>/`, visible in your gallery and in every upload
-  picker immediately. Your camera roll is never touched, and there is no second private copy
-  to drift out of sync.
+  picker immediately. There is no second private copy to drift out of sync. Your camera roll
+  is left alone unless you turn on *Remove originals after import* (Android 11+), which
+  keeps one copy of each photo in your gallery; the originals wait in the gallery's trash for
+  30 days.
+- **Notices deletes made in the gallery.** An album image deleted outside the app shows dimmed
+  with an "In trash" badge; tap it to restore it. Once the trash empties, it is removed from
+  the app too, but any NextCloud copy is kept.
 - **Generates metadata with OpenAI vision, or on the phone itself** - title, description,
   relevance-ordered keywords, and a category. An optional hint adds what the model cannot see
   in the pixels, such as the place, subject or event; with OpenAI, a place it names leads the

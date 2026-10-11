@@ -1,9 +1,11 @@
 package com.mrlaki5.mystockmanager.ui.events
 
 import android.net.Uri
+import androidx.activity.result.IntentSenderRequest
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
@@ -13,6 +15,9 @@ import com.mrlaki5.mystockmanager.generation.GenerationProvider
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
 import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
 import com.mrlaki5.mystockmanager.ondevice.OnDeviceModelStore
+import com.mrlaki5.mystockmanager.storage.ImportSummary
+import com.mrlaki5.mystockmanager.storage.OriginalTrash
+import com.mrlaki5.mystockmanager.storage.OriginalTrashRequest
 import com.mrlaki5.mystockmanager.work.NetworkStatus
 import com.mrlaki5.mystockmanager.work.WorkScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +36,7 @@ class EventDetailViewModel @Inject constructor(
     private val keyStore: SecureKeyStore,
     private val networkStatus: NetworkStatus,
     private val modelStore: OnDeviceModelStore,
+    private val originalTrash: OriginalTrash,
     nextcloud: NextcloudSettings,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -69,6 +75,19 @@ class EventDetailViewModel @Inject constructor(
     val cloudMarks: StateFlow<Map<Long, CloudMark>> = repository.observeCloudMarks(eventId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    /** How many originals the app's own "remove the originals?" prompt is asking about. */
+    private val _trashPrompt = MutableStateFlow<Int?>(null)
+    val trashPrompt: StateFlow<Int?> = _trashPrompt.asStateFlow()
+    private var pendingTrash: OriginalTrashRequest? = null
+
+    /** The system "move to trash" dialog, until it is shown. */
+    private val _trashRequest = MutableStateFlow<IntentSenderRequest?>(null)
+    val trashRequest: StateFlow<IntentSenderRequest?> = _trashRequest.asStateFlow()
+
+    /** Held back while the trash dialog is up, so the snackbar reports both steps at once. */
+    private var importReport: String? = null
+    private var trashCount = 0
+
     fun albumNameFor(eventName: String): String = repository.albumNameFor(eventName)
 
     fun toggleSelection(imageId: Long) {
@@ -84,6 +103,7 @@ class EventDetailViewModel @Inject constructor(
     /** Selects only what Generate would actually act on — the ungenerated and the failed. */
     fun selectUngenerated() {
         _selection.value = loadedImages
+            .filter { it.albumState == AlbumState.PRESENT }
             .filter { it.state == ImageState.FILED || it.state == ImageState.GENERATION_FAILED }
             .map { it.id }
             .toSet()
@@ -98,13 +118,51 @@ class EventDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _busy.value = true
             val summary = repository.importInto(eventId, uris)
+            val request = if (keyStore.trashOriginalsAfterImport) originalTrash.request(summary.importedSources) else null
             _busy.value = false
-            _message.value = buildString {
-                append("Imported ${summary.imported} of ${summary.total}")
-                if (summary.duplicates > 0) append(" · ${summary.duplicates} already here")
-                if (summary.failed > 0) append(" · ${summary.failed} failed")
+            if (request == null) {
+                _message.value = report(summary)
+            } else {
+                importReport = report(summary)
+                trashCount = request.count
+                pendingTrash = request
+                _trashPrompt.value = request.count
             }
         }
+    }
+
+    /** Android's own dialog only says "move to trash", so the app explains why first. */
+    fun answerTrashPrompt(remove: Boolean) {
+        _trashPrompt.value = null
+        val request = pendingTrash.also { pendingTrash = null }
+        if (remove && request != null) {
+            _trashRequest.value = IntentSenderRequest.Builder(request.intent).build()
+        } else {
+            onTrashResult(false)
+        }
+    }
+
+    fun onTrashRequestShown() {
+        _trashRequest.value = null
+    }
+
+    fun onTrashResult(trashed: Boolean) {
+        val outcome = if (trashed) "$trashCount original${if (trashCount == 1) "" else "s"} moved to trash" else "originals kept"
+        _message.value = listOfNotNull(importReport, outcome).joinToString(" · ")
+        importReport = null
+    }
+
+    /** Silent and immediate: the app owns the file, so Android asks for no confirmation. */
+    fun restore(imageId: Long) {
+        viewModelScope.launch {
+            _message.value = if (repository.restoreFromTrash(imageId)) "Restored from trash" else "Could not restore this image"
+        }
+    }
+
+    private fun report(summary: ImportSummary) = buildString {
+        append("Imported ${summary.imported} of ${summary.total}")
+        if (summary.duplicates > 0) append(" · ${summary.duplicates} already here")
+        if (summary.failed > 0) append(" · ${summary.failed} failed")
     }
 
     /** [hint] is optional; blank means the model works from the pixels alone. */

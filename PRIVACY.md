@@ -23,7 +23,9 @@ where that data goes, and how to delete it.
 ### Photos you import
 
 The photos you pick are copied into `Pictures/StockReady/` on your device. The app does
-not open your camera roll or any other photos unless you pick them.
+not open your camera roll or any other photos unless you pick them. If you turn on *Remove
+originals after import*, the app asks before moving the photos you just imported to the
+system trash, and Android asks again; nothing is moved without both confirmations.
 
 ### Photos and hints sent to OpenAI
 

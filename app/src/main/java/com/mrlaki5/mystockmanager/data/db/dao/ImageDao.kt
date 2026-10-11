@@ -3,9 +3,12 @@ package com.mrlaki5.mystockmanager.data.db.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import kotlinx.coroutines.flow.Flow
+
+data class AlbumRow(val id: Long, val mediaStoreUri: String, val albumState: AlbumState, val trashExpiresAt: Long?)
 
 @Dao
 interface ImageDao {
@@ -130,4 +133,10 @@ interface ImageDao {
 
     @Query("UPDATE images SET captionPlace = :place WHERE id = :id")
     suspend fun setCaptionPlace(id: Long, place: String)
+
+    @Query("SELECT id, mediaStoreUri, albumState, trashExpiresAt FROM images WHERE mediaStoreUri IS NOT NULL")
+    suspend fun getAlbumRows(): List<AlbumRow>
+
+    @Query("UPDATE images SET albumState = :state, trashExpiresAt = :expiresAt WHERE id = :id")
+    suspend fun setAlbumState(id: Long, state: AlbumState, expiresAt: Long?)
 }

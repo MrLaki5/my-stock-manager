@@ -17,6 +17,7 @@ import com.mrlaki5.mystockmanager.openai.OpenAiModel
 import com.mrlaki5.mystockmanager.openai.OpenAiModels
 import com.mrlaki5.mystockmanager.openai.ReasoningEffort
 import com.mrlaki5.mystockmanager.openai.VisionPrompt
+import com.mrlaki5.mystockmanager.storage.OriginalTrash
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -57,7 +58,13 @@ class SettingsViewModel @Inject constructor(
     private val coordinator: SyncCoordinator,
     private val modelStore: OnDeviceModelStore,
     private val onDeviceClient: OnDeviceClient,
+    originalTrash: OriginalTrash,
 ) : ViewModel() {
+
+    val canTrashOriginals: Boolean = originalTrash.supported
+
+    private val _trashOriginals = MutableStateFlow(keyStore.trashOriginalsAfterImport)
+    val trashOriginals: StateFlow<Boolean> = _trashOriginals.asStateFlow()
 
     private val _provider = MutableStateFlow(keyStore.provider)
     val provider: StateFlow<GenerationProvider> = _provider.asStateFlow()
@@ -161,6 +168,11 @@ class SettingsViewModel @Inject constructor(
                 delay(MODEL_POLL_MS)
             }
         }
+    }
+
+    fun setTrashOriginals(on: Boolean) {
+        _trashOriginals.value = on
+        keyStore.trashOriginalsAfterImport = on
     }
 
     fun setApiKey(value: String) {
