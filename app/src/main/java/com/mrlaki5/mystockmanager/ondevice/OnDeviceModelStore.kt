@@ -104,13 +104,23 @@ class OnDeviceModelStore @Inject constructor(
                 .setTitle("On-device model: ${file.fileName}")
                 .setDescription("On-device metadata generation")
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-                .setAllowedOverMetered(false)
+                .setAllowedOverMetered(keyStore.modelDownloadMobileData)
                 .setAllowedOverRoaming(false)
                 .setDestinationInExternalFilesDir(context, MODELS_DIR, partName(file))
             file.fileName to downloads.enqueue(request)
         }
         savePending(ids)
         _state.value = ModelState.Downloading(0, OnDeviceModel.TOTAL_BYTES, waitingForWifi = false)
+    }
+
+    val allowMobileData: Boolean get() = keyStore.modelDownloadMobileData
+
+    /** DownloadManager cannot change a queued request's network rules, so a download in flight starts again. */
+    fun setAllowMobileData(on: Boolean) {
+        keyStore.modelDownloadMobileData = on
+        if (pending().isEmpty()) return
+        cancelDownload()
+        startDownload()
     }
 
     fun cancelDownload() {

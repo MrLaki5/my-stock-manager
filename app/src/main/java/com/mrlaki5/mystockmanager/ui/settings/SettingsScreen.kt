@@ -118,7 +118,7 @@ fun SettingsScreen(
             NextcloudSection(viewModel)
 
             HorizontalDivider()
-            Hint("MyStockManager is open source under the MIT license.")
+            Hint("MyStockManager is source available under the PolyForm Noncommercial license.")
             Row {
                 TextButton(onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) }) { Text("Privacy policy") }
                 TextButton(onClick = { uriHandler.openUri(SOURCE_CODE_URL) }) { Text("Source code") }
@@ -184,6 +184,7 @@ private fun OpenAiSection(viewModel: SettingsViewModel) {
 @Composable
 private fun OnDeviceSection(viewModel: SettingsViewModel) {
     val state by viewModel.modelState.collectAsStateWithLifecycle()
+    val mobileData by viewModel.modelMobileData.collectAsStateWithLifecycle()
     var confirmingDelete by remember { mutableStateOf(false) }
 
     SectionTitle("On-device model", OnDeviceModel.PAGE_URL, "About the on-device model")
@@ -200,6 +201,16 @@ private fun OnDeviceSection(viewModel: SettingsViewModel) {
         )
     }
 
+    if (state is ModelState.Missing || state is ModelState.Downloading || state is ModelState.Failed) {
+        SwitchRow(
+            title = "Allow mobile data",
+            subtitle = "Otherwise the download waits for Wi-Fi.",
+            checked = mobileData,
+            enabled = true,
+            onCheckedChange = viewModel::setModelMobileData,
+        )
+    }
+
     when (val current = state) {
         ModelState.Unsupported -> Text(
             "On-device generation needs a 64-bit processor, which this phone does not have.",
@@ -207,7 +218,7 @@ private fun OnDeviceSection(viewModel: SettingsViewModel) {
         )
         ModelState.Missing -> {
             Button(onClick = viewModel::downloadModel) { Text("Download model (%.1f GB)".format(OnDeviceModel.TOTAL_BYTES / 1e9)) }
-            Hint("Downloads once, over Wi-Fi only, from Hugging Face. LFM2.5-VL is under the LFM Open License.")
+            Hint("Downloads once from Hugging Face. LFM2.5-VL is under the LFM Open License.")
         }
         is ModelState.Downloading -> {
             LinearProgressIndicator(

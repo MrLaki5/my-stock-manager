@@ -95,7 +95,7 @@ the caption, so it only says what is in the picture. Asked for a whole keyword l
 more keyword" again and again, a model this small starts repeating itself after a few words;
 one narrow question at a time avoids that. Hint terms come first in the keyword list.
 
-The file (0.4 GB) is downloaded over Wi-Fi from Hugging Face when you ask for it in Settings,
+The file (0.4 GB) is downloaded from Hugging Face (over Wi-Fi, or mobile data if you choose) when you ask for it in Settings,
 pinned to a fixed revision and checked against its SHA-256. The text is simpler than OpenAI's,
 and the editable system prompt applies to OpenAI only.
 
@@ -146,3 +146,12 @@ AAB and APK and attaches both to a GitHub release. Add these repository secrets 
 
 Before each release, bump both `versionCode` (Play rejects a code it has seen before) and
 `versionName` in `app/build.gradle.kts`.
+
+## License
+
+Source available under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, change and
+share it for noncommercial purposes, as long as you pass on the license and its `Required Notice:` line
+crediting Milan Lazarević. Commercial use needs a separate license; ask by
+[opening an issue](https://github.com/MrLaki5/my-stock-manager/issues).
+Versions released before this change remain available under the MIT license.
+Contributions are welcome under the terms in [CONTRIBUTING.md](CONTRIBUTING.md).

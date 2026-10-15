@@ -48,8 +48,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mrlaki5.mystockmanager.data.db.dao.FolderSummary
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceModel
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -64,6 +66,7 @@ fun EventListScreen(
     val events by viewModel.events.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val syncEnabled by viewModel.syncEnabled.collectAsStateWithLifecycle()
+    val setupStep by viewModel.setupStep.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val haptic = LocalHapticFeedback.current
 
@@ -71,13 +74,23 @@ fun EventListScreen(
     var ordered by remember(events) { mutableStateOf(events) }
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
-        ordered = ordered.toMutableList().apply { add(to.index, removeAt(from.index)) }
-        haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+        // By key, because the setup card can sit above the events and shift every list index.
+        val fromIndex = ordered.indexOfFirst { it.id == from.key }
+        val toIndex = ordered.indexOfFirst { it.id == to.key }
+        if (fromIndex >= 0 && toIndex >= 0) {
+            ordered = ordered.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+            haptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+        }
     }
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<FolderSummary?>(null) }
     var deleting by remember { mutableStateOf<FolderSummary?>(null) }
+
+    LifecycleResumeEffect(Unit) {
+        viewModel.refreshSetup()
+        onPauseOrDispose { }
+    }
 
     LaunchedEffect(message) {
         message?.let {
@@ -107,7 +120,10 @@ fun EventListScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         if (events.isEmpty()) {
-            EmptyEvents(Modifier.fillMaxSize().padding(padding))
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                setupStep?.let { SetupCard(it, onOpenSettings, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)) }
+                EmptyEvents(Modifier.fillMaxWidth().weight(1f))
+            }
         } else {
             LazyColumn(
                 state = listState,
@@ -121,6 +137,7 @@ fun EventListScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                setupStep?.let { step -> item(key = "setup") { SetupCard(step, onOpenSettings) } }
                 items(ordered, key = { it.id }) { event ->
                     ReorderableItem(reorderState, key = event.id) { isDragging ->
                         EventRow(
@@ -255,6 +272,32 @@ private fun FolderSummary.summaryLine(): String {
         if (generatingCount > 0) add("$generatingCount generating")
         if (failedCount > 0) add("$failedCount failed")
     }.joinToString(" · ")
+}
+
+@Composable
+private fun SetupCard(step: SetupStep, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+    val (title, body) = when (step) {
+        SetupStep.CHOOSE_PROVIDER -> "Set up generation" to
+            "Download the free on-device model (%.1f GB) or add an OpenAI key.".format(OnDeviceModel.TOTAL_BYTES / 1e9)
+        SetupStep.MODEL_DOWNLOADING -> "Model downloading" to "Add images once it finishes."
+        SetupStep.OPENAI_KEY_MISSING -> "Add your OpenAI key" to "Or switch to the free on-device model."
+        SetupStep.ON_DEVICE_UNSUPPORTED -> "Add an OpenAI key" to "This phone can't run the on-device model."
+    }
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(body, style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = onOpenSettings) { Text("Settings") }
+        }
+    }
 }
 
 @Composable
