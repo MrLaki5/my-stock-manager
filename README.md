@@ -154,3 +154,4 @@ share it for noncommercial purposes, as long as you pass on the license and its 
 crediting Milan Lazarević. Commercial use needs a separate license; ask by
 [opening an issue](https://github.com/MrLaki5/my-stock-manager/issues).
 Versions released before this change remain available under the MIT license.
+Contributions are welcome under the terms in [CONTRIBUTING.md](CONTRIBUTING.md).
