@@ -21,7 +21,7 @@ BUILT FOR STOCK WORK
 
 ON-DEVICE GENERATION (OPTIONAL)
 • Generate with no API key and no cost. A small model runs on your phone, about 15 seconds per image on a mid-range phone.
-• Download it once in Settings (about 0.4 GB, from Hugging Face over Wi-Fi) and delete it any time.
+• Download it once in Settings (about 0.4 GB, from Hugging Face over Wi-Fi or mobile data) and delete it any time.
 • Photos and hints never leave your phone. The text is simpler than OpenAI's, so review it with care.
 
 OPTIONAL NEXTCLOUD BACKUP

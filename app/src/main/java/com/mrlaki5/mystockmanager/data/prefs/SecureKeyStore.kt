@@ -52,6 +52,8 @@ class SecureKeyStore(context: Context) {
     /** On-device model downloads in flight, as "fileName=downloadId" pairs joined by commas. */
     var modelDownloads: String by string(KEY_MODEL_DOWNLOADS)
 
+    var modelDownloadMobileData: Boolean by boolean(KEY_MODEL_MOBILE_DATA, default = false)
+
     /** Blank means the built-in default, so prompt improvements still reach users who never edited it. */
     var systemPrompt: String by string(KEY_SYSTEM_PROMPT)
 
@@ -101,6 +103,7 @@ class SecureKeyStore(context: Context) {
         private const val KEY_SYSTEM_PROMPT = "openai_system_prompt"
         private const val KEY_PROVIDER = "generation_provider"
         private const val KEY_MODEL_DOWNLOADS = "on_device_model_downloads"
+        private const val KEY_MODEL_MOBILE_DATA = "on_device_model_mobile_data"
         private const val KEY_NC_SERVER = "nextcloud_server"
         private const val KEY_NC_LOGIN = "nextcloud_login"
         private const val KEY_NC_PASSWORD = "nextcloud_app_password"

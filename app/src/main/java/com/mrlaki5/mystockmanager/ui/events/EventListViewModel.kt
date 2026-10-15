@@ -3,14 +3,20 @@ package com.mrlaki5.mystockmanager.ui.events
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrlaki5.mystockmanager.data.db.dao.FolderSummary
+import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
 import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
+import com.mrlaki5.mystockmanager.ondevice.OnDeviceModelStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -18,6 +24,8 @@ import javax.inject.Inject
 class EventListViewModel @Inject constructor(
     private val repository: StockRepository,
     nextcloud: NextcloudSettings,
+    private val keyStore: SecureKeyStore,
+    private val modelStore: OnDeviceModelStore,
 ) : ViewModel() {
 
     val events: StateFlow<List<FolderSummary>> = repository.observeEvents()
@@ -25,6 +33,14 @@ class EventListViewModel @Inject constructor(
 
     val syncEnabled: StateFlow<Boolean> = nextcloud.enabledOffMain()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    // Provider and key are plain prefs, so a bump re-reads them after Settings may have changed them.
+    private val setupChecks = MutableStateFlow(0)
+
+    val setupStep: StateFlow<SetupStep?> = combine(modelStore.state, setupChecks) { model, _ ->
+        SetupStep.of(keyStore.provider, keyStore.hasApiKey, model)
+    }.flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -46,6 +62,11 @@ class EventListViewModel @Inject constructor(
     fun deleteEvent(id: Long) = viewModelScope.launch {
         repository.deleteEvent(id)
         _message.value = "Event deleted"
+    }
+
+    fun refreshSetup() {
+        setupChecks.update { it + 1 }
+        viewModelScope.launch { modelStore.refresh() }
     }
 
     fun consumeMessage() {

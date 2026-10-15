@@ -71,6 +71,9 @@ class SettingsViewModel @Inject constructor(
 
     val modelState: StateFlow<ModelState> = modelStore.state
 
+    private val _modelMobileData = MutableStateFlow(modelStore.allowMobileData)
+    val modelMobileData: StateFlow<Boolean> = _modelMobileData.asStateFlow()
+
     /** Null when the phone has enough memory for the model. */
     val lowMemoryGb: Double? = modelStore.totalRamBytes
         .takeIf { it in 1 until OnDeviceModel.RECOMMENDED_RAM_BYTES }
@@ -147,6 +150,12 @@ class SettingsViewModel @Inject constructor(
 
     fun downloadModel() {
         modelStore.startDownload()
+        watchModel()
+    }
+
+    fun setModelMobileData(on: Boolean) {
+        _modelMobileData.value = on
+        modelStore.setAllowMobileData(on)
         watchModel()
     }
 
