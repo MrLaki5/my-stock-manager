@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -74,12 +76,54 @@ import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
 import com.mrlaki5.mystockmanager.ui.components.albumLabel
 import com.mrlaki5.mystockmanager.ui.components.label
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Pages through the event's images in grid order, starting at the one that was opened. */
 @Composable
 fun ImageDetailScreen(
     onBack: () -> Unit,
-    viewModel: ImageDetailViewModel = hiltViewModel(),
+    pager: ImagePagerViewModel = hiltViewModel(),
 ) {
+    val ids by pager.ids.collectAsStateWithLifecycle()
+    val loaded = ids
+    if (loaded == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        return
+    }
+
+    val state = rememberPagerState(
+        initialPage = loaded.indexOf(pager.openedId).coerceAtLeast(0),
+        pageCount = { loaded.size },
+    )
+    var currentDirty by remember { mutableStateOf(false) }
+
+    // Paging is locked while there are unsaved edits, so a swipe can never drop them.
+    HorizontalPager(
+        state = state,
+        key = { loaded[it] },
+        beyondViewportPageCount = 1,
+        userScrollEnabled = !currentDirty,
+        modifier = Modifier.fillMaxSize(),
+    ) { page ->
+        val isCurrent = page == state.currentPage
+        ImageDetailPage(
+            imageId = loaded[page],
+            isCurrent = isCurrent,
+            onBack = onBack,
+            onDirtyChange = { if (isCurrent) currentDirty = it },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImageDetailPage(
+    imageId: Long,
+    isCurrent: Boolean,
+    onBack: () -> Unit,
+    onDirtyChange: (Boolean) -> Unit,
+) {
+    val viewModel = hiltViewModel<ImageDetailViewModel, ImageDetailViewModel.Factory>(
+        key = "image-$imageId",
+    ) { it.create(imageId) }
     val image by viewModel.image.collectAsStateWithLifecycle()
     val draft by viewModel.draft.collectAsStateWithLifecycle()
     val caption by viewModel.caption.collectAsStateWithLifecycle()
@@ -89,6 +133,8 @@ fun ImageDetailScreen(
     val cloud by viewModel.cloud.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+
+    LaunchedEffect(dirty, isCurrent) { if (isCurrent) onDirtyChange(dirty) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -101,7 +147,7 @@ fun ImageDetailScreen(
     // nothing to show for the work. Both ways out are guarded, not just the back gesture.
     var confirmingLeave by remember { mutableStateOf(false) }
     val leave = { if (dirty) confirmingLeave = true else onBack() }
-    BackHandler(enabled = dirty) { confirmingLeave = true }
+    BackHandler(enabled = dirty && isCurrent) { confirmingLeave = true }
 
     if (confirmingLeave) {
         AlertDialog(
