@@ -1,6 +1,5 @@
 package com.mrlaki5.mystockmanager.ui.images
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
@@ -9,6 +8,9 @@ import com.mrlaki5.mystockmanager.nextcloud.CloudStatus
 import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,7 +21,6 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 /**
  * The editable copy of an image's metadata.
@@ -53,13 +54,17 @@ data class MetadataDraft(
 /** The two facts the caption is prefixed with, neither of which is edited on this screen. */
 private data class CaptionLead(val location: String?, val capturedOn: String?)
 
-@HiltViewModel
-class ImageDetailViewModel @Inject constructor(
+/** One per pager page, so the image id is passed in rather than read from the route. */
+@HiltViewModel(assistedFactory = ImageDetailViewModel.Factory::class)
+class ImageDetailViewModel @AssistedInject constructor(
     private val repository: StockRepository,
-    savedStateHandle: SavedStateHandle,
+    @Assisted private val imageId: Long,
 ) : ViewModel() {
 
-    private val imageId: Long = checkNotNull(savedStateHandle.get<Long>("imageId"))
+    @AssistedFactory
+    interface Factory {
+        fun create(imageId: Long): ImageDetailViewModel
+    }
 
     val image: StateFlow<ImageEntity?> = repository.observeImage(imageId)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
