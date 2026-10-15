@@ -118,7 +118,7 @@ fun SettingsScreen(
             NextcloudSection(viewModel)
 
             HorizontalDivider()
-            Hint("MyStockManager is open source under the MIT license.")
+            Hint("MyStockManager is source available under the PolyForm Noncommercial license.")
             Row {
                 TextButton(onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) }) { Text("Privacy policy") }
                 TextButton(onClick = { uriHandler.openUri(SOURCE_CODE_URL) }) { Text("Source code") }

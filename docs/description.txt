@@ -32,7 +32,7 @@ YOU STAY IN CONTROL
 • Uploading stays manual. The app never logs in to or submits to any agency. You add the files in the agency's upload form, just like photos you keyworded in Lightroom or Bridge.
 • AI is optional, and it never creates or changes your photos. It only drafts the text, and it is up to you to check that the text describes each image accurately.
 • With OpenAI, photos are sent only when you tap Generate. They are downscaled and have location data removed first. Metadata you write by hand is never sent to OpenAI, and on-device generation sends nothing. There is no account, no ads and no analytics, and the developer receives none of your data.
-• Open source under the MIT license. Code and issues at https://github.com/MrLaki5/my-stock-manager
+• Source available under the PolyForm Noncommercial license. Code and issues at https://github.com/MrLaki5/my-stock-manager
 
 REQUIREMENTS
 • For AI drafting, either the on-device model (0.4 GB download, 64-bit ARM phone) or your own OpenAI API key, entered in Settings. OpenAI bills your API account for what you use. gpt-6-luna is much cheaper per image; gpt-6.1-sol gives stronger keywords. Higher reasoning costs more and is slower. With neither, you can still write all the metadata by hand.

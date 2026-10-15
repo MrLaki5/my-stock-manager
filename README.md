@@ -147,3 +147,10 @@ AAB and APK and attaches both to a GitHub release. Add these repository secrets 
 Before each release, bump both `versionCode` (Play rejects a code it has seen before) and
 `versionName` in `app/build.gradle.kts`.
 
+## License
+
+Source available under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, change and
+share it for noncommercial purposes, as long as you pass on the license and its `Required Notice:` line
+crediting Milan Lazarević. Commercial use needs a separate license; ask by
+[opening an issue](https://github.com/MrLaki5/my-stock-manager/issues).
+Versions released before this change remain available under the MIT license.
