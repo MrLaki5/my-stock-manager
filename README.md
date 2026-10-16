@@ -19,7 +19,7 @@ Shutterstock already carries its metadata.
 
 ## See it in action
 
-<a href="https://www.youtube.com/watch?v=nyIfX04OXjg"><img src="https://img.youtube.com/vi/nyIfX04OXjg/maxresdefault.jpg" alt="Watch the MyStockManager showcase video on YouTube" width="640"></a>
+<a href="https://www.youtube.com/watch?v=nyIfX04OXjg"><img src="docs/video-thumbnail.jpg" alt="Watch the MyStockManager showcase video on YouTube" width="640"></a>
 
 ## What it does
 
