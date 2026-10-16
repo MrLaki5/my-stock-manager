@@ -17,6 +17,10 @@ Shutterstock already carries its metadata.
   <img src="docs/screenshot-6.png" alt="Optional NextCloud sync in Settings" width="16%">
 </p>
 
+## See it in action
+
+<a href="https://www.youtube.com/watch?v=nyIfX04OXjg"><img src="https://img.youtube.com/vi/nyIfX04OXjg/maxresdefault.jpg" alt="Watch the MyStockManager showcase video on YouTube" width="640"></a>
+
 ## What it does
 
 - **Organises shoots into events** - one event per shoot, day or theme.
