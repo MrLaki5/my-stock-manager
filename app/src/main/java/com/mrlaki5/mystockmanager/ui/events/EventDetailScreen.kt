@@ -41,7 +41,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,6 +67,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
 import com.mrlaki5.mystockmanager.ui.components.AlbumBadge
 import com.mrlaki5.mystockmanager.ui.components.CloudBadge
+import com.mrlaki5.mystockmanager.ui.components.GenerateHintDialog
 import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,7 +122,7 @@ fun EventDetailScreen(
     }
 
     if (askingHint) {
-        HintDialog(
+        GenerateHintDialog(
             count = selection.size,
             initialHint = event?.hint.orEmpty(),
             onDismiss = { askingHint = false },
@@ -237,44 +237,6 @@ fun EventDetailScreen(
             }
         }
     }
-}
-
-@Composable
-private fun HintDialog(
-    count: Int,
-    initialHint: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var hint by remember { mutableStateOf(initialHint) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Generate for $count image${if (count == 1) "" else "s"}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = hint,
-                    onValueChange = { hint = it },
-                    label = { Text("Hint (optional)") },
-                    placeholder = { Text("e.g. Kotor, Montenegro · 1972 Fiat 500 at a classic car show") },
-                    maxLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    "Context the model cannot see in the photo: where it was taken, what the " +
-                        "subject is, the event it shows. Anything you enter is treated as fact " +
-                        "and used in the title, description and keywords; a place it names also " +
-                        "leads the caption. Leave it blank to skip.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(hint) }) { Text("Generate") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
 
 @Composable
