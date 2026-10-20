@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -32,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,6 +75,7 @@ import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
 import com.mrlaki5.mystockmanager.ui.components.CloudBadge
+import com.mrlaki5.mystockmanager.ui.components.GenerateHintDialog
 import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
 import com.mrlaki5.mystockmanager.ui.components.albumLabel
 import com.mrlaki5.mystockmanager.ui.components.label
@@ -131,6 +135,8 @@ private fun ImageDetailPage(
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val cloud by viewModel.cloud.collectAsStateWithLifecycle()
+    val generating by viewModel.generating.collectAsStateWithLifecycle()
+    val eventHint by viewModel.eventHint.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
 
@@ -168,6 +174,20 @@ private fun ImageDetailPage(
             },
             dismissButton = {
                 TextButton(onClick = { confirmingLeave = false }) { Text("Keep editing") }
+            },
+        )
+    }
+
+    var askingHint by remember { mutableStateOf(false) }
+    if (askingHint) {
+        GenerateHintDialog(
+            count = 1,
+            initialHint = eventHint,
+            replacesExisting = image?.title != null,
+            onDismiss = { askingHint = false },
+            onConfirm = {
+                viewModel.generate(it)
+                askingHint = false
             },
         )
     }
@@ -242,6 +262,14 @@ private fun ImageDetailPage(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.weight(1f))
+                GenerateButton(
+                    hasMetadata = current.title != null,
+                    generating = generating,
+                    // Generating over unsaved edits would leave the save bar fighting the result.
+                    enabled = !dirty && !busy && current.albumState == AlbumState.PRESENT,
+                    onClick = { askingHint = true },
+                )
             }
 
             cloud?.let { status ->
@@ -271,6 +299,7 @@ private fun ImageDetailPage(
                     draft = editable,
                     caption = caption,
                     capturedOn = current.capturedOn,
+                    enabled = !generating,
                     viewModel = viewModel,
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                 )
@@ -326,6 +355,7 @@ private fun MetadataEditor(
     draft: MetadataDraft,
     caption: String,
     capturedOn: String?,
+    enabled: Boolean,
     viewModel: ImageDetailViewModel,
     modifier: Modifier = Modifier,
 ) {
@@ -335,6 +365,7 @@ private fun MetadataEditor(
         OutlinedTextField(
             value = draft.title,
             onValueChange = viewModel::setTitle,
+            enabled = enabled,
             label = { Text("Title") },
             isError = draft.title.isBlank(),
             supportingText = {
@@ -352,6 +383,7 @@ private fun MetadataEditor(
         OutlinedTextField(
             value = draft.description,
             onValueChange = viewModel::setDescription,
+            enabled = enabled,
             label = { Text("Description") },
             isError = draft.description.isBlank(),
             minLines = 3,
@@ -371,6 +403,7 @@ private fun MetadataEditor(
 
         KeywordSection(
             keywords = draft.keywords,
+            enabled = enabled,
             onEdit = { editingKeyword = it },
             onRemove = viewModel::removeKeyword,
             onAdd = viewModel::addKeyword,
@@ -379,6 +412,7 @@ private fun MetadataEditor(
         OutlinedTextField(
             value = draft.category,
             onValueChange = viewModel::setCategory,
+            enabled = enabled,
             label = { Text("Category") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -460,6 +494,7 @@ private fun CaptionPreview(caption: String, hasDate: Boolean) {
 @Composable
 private fun KeywordSection(
     keywords: List<String>,
+    enabled: Boolean,
     onEdit: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onAdd: (String) -> Unit,
@@ -504,6 +539,7 @@ private fun KeywordSection(
             keywords.forEachIndexed { index, keyword ->
                 SuggestionChip(
                     onClick = { onEdit(index) },
+                    enabled = enabled,
                     label = { Text(keyword) },
                     icon = {
                         Icon(
@@ -511,7 +547,7 @@ private fun KeywordSection(
                             contentDescription = "Remove $keyword",
                             modifier = Modifier
                                 .size(16.dp)
-                                .clickable(onClick = { onRemove(index) }),
+                                .clickable(enabled = enabled, onClick = { onRemove(index) }),
                         )
                     },
                     colors = SuggestionChipDefaults.suggestionChipColors(),
@@ -522,6 +558,7 @@ private fun KeywordSection(
         OutlinedTextField(
             value = pending,
             onValueChange = { pending = it },
+            enabled = enabled,
             label = { Text("Add a keyword") },
             singleLine = true,
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -539,7 +576,7 @@ private fun KeywordSection(
                         onAdd(pending)
                         pending = ""
                     },
-                    enabled = pending.isNotBlank(),
+                    enabled = enabled && pending.isNotBlank(),
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Add keyword")
                 }
@@ -602,6 +639,25 @@ private fun KeywordDialog(
 }
 
 @Composable
+private fun GenerateButton(hasMetadata: Boolean, generating: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    FilledTonalButton(onClick = onClick, enabled = enabled && !generating) {
+        if (generating) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.size(8.dp))
+        Text(
+            when {
+                generating -> "Generating"
+                hasMetadata -> "Regenerate"
+                else -> "Generate"
+            }
+        )
+    }
+}
+
+@Composable
 private fun SaveBar(canSave: Boolean, onDiscard: () -> Unit, onSave: () -> Unit) {
     Surface(tonalElevation = 3.dp) {
         Row(
@@ -625,7 +681,7 @@ private fun NoMetadataHint(modifier: Modifier = Modifier) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("No metadata yet", style = MaterialTheme.typography.titleMedium)
         Text(
-            "Write it below, or select this image in the event and tap Generate metadata.",
+            "Write it below, or tap Generate to have the model write it.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

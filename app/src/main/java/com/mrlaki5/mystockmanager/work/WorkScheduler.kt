@@ -10,7 +10,9 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.mrlaki5.mystockmanager.generation.GenerationProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -77,6 +79,11 @@ class WorkScheduler @Inject constructor(
         others.forEach { workManager.cancelWorkById(it.id) }
         return others.mapNotNull(::imageIdOf).toSet()
     }
+
+    /** True while work for [imageId] is queued or running; a queued on-device job has not reached GENERATING yet. */
+    fun observePending(imageId: Long): Flow<Boolean> =
+        WorkManager.getInstance(context).getWorkInfosByTagFlow(imageTagFor(imageId))
+            .map { infos -> infos.any { !it.state.isFinished } }
 
     private suspend fun unfinishedImageIds(): Set<Long> =
         WorkManager.getInstance(context).getWorkInfosByTagFlow(TAG_GENERATION).first()

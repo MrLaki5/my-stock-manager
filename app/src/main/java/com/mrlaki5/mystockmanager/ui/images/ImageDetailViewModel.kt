@@ -2,23 +2,31 @@ package com.mrlaki5.mystockmanager.ui.images
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
+import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
 import com.mrlaki5.mystockmanager.nextcloud.CloudStatus
 import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
+import com.mrlaki5.mystockmanager.work.GenerationQueue
+import com.mrlaki5.mystockmanager.work.WorkScheduler
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -58,6 +66,8 @@ private data class CaptionLead(val location: String?, val capturedOn: String?)
 @HiltViewModel(assistedFactory = ImageDetailViewModel.Factory::class)
 class ImageDetailViewModel @AssistedInject constructor(
     private val repository: StockRepository,
+    private val generationQueue: GenerationQueue,
+    workScheduler: WorkScheduler,
     @Assisted private val imageId: Long,
 ) : ViewModel() {
 
@@ -71,6 +81,21 @@ class ImageDetailViewModel @AssistedInject constructor(
 
     val cloud: StateFlow<CloudStatus?> = repository.observeCloudStatus(imageId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Queued or running; the row only says GENERATING once a worker has actually picked it up. */
+    val generating: StateFlow<Boolean> = combine(image, workScheduler.observePending(imageId)) { image, pending ->
+        pending || image?.state == ImageState.GENERATING
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** The event's last hint, offered again so one image does not need it retyped. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val eventHint: StateFlow<String> = image
+        .map { it?.folderId }
+        .distinctUntilChanged()
+        .flatMapLatest { folderId ->
+            if (folderId == null) flowOf("") else repository.observeEvent(folderId).map { it?.hint.orEmpty() }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
     private val _draft = MutableStateFlow<MetadataDraft?>(null)
     val draft: StateFlow<MetadataDraft?> = _draft.asStateFlow()
@@ -105,13 +130,16 @@ class ImageDetailViewModel @AssistedInject constructor(
     val message: StateFlow<String?> = _message.asStateFlow()
 
     init {
-        // Seeded once, from the first row that arrives. Later emissions are not folded in:
-        // one of them is this screen's own save, and re-seeding from any of them would
-        // throw away edits the user is still in the middle of making.
+        // Later rows are folded in only while nothing is being edited, so finished generation shows up without discarding typing.
         viewModelScope.launch {
-            val image = repository.observeImage(imageId).filterNotNull().first()
-            _lead.value = CaptionLead(image.captionPlace, image.capturedOn)
-            seed(MetadataDraft.of(image))
+            repository.observeImage(imageId).filterNotNull()
+                .map { CaptionLead(it.captionPlace, it.capturedOn) to MetadataDraft.of(it) }
+                .distinctUntilChanged()
+                .collect { (lead, draft) ->
+                    if (_draft.value != _saved.value) return@collect
+                    _lead.value = lead
+                    seed(draft)
+                }
         }
     }
 
@@ -203,6 +231,16 @@ class ImageDetailViewModel @AssistedInject constructor(
                 .onFailure { _message.value = it.message ?: "Could not save" }
             _busy.value = false
         }
+    }
+
+    fun generate(hint: String?) {
+        val image = image.value ?: return
+        if (generating.value || dirty.value || image.albumState != AlbumState.PRESENT) return
+        generationQueue.blocker()?.let {
+            _message.value = it
+            return
+        }
+        viewModelScope.launch { _message.value = generationQueue.enqueue(image.folderId, listOf(imageId), hint) }
     }
 
     fun restore() {
