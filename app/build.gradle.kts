@@ -28,8 +28,8 @@ android {
         applicationId = "com.mrlaki5.mystockmanager"
         minSdk = 29
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.9"
+        versionCode = 7
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

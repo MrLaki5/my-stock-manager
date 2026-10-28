@@ -4,7 +4,7 @@
 
 **Android app that turns a shoot into upload-ready stock photos.** It drafts the title,
 description and keywords for every image and keeps them in one CSV per event, in a format
-both Adobe Stock and Shutterstock accept, synced to your NextCloud next to the photos.
+both Adobe Stock and Shutterstock accept, saved on the phone and synced to your NextCloud.
 
 <a href="https://play.google.com/store/apps/details?id=com.mrlaki5.mystockmanager"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80"></a>
 
@@ -54,7 +54,7 @@ both Adobe Stock and Shutterstock accept, synced to your NextCloud next to the p
   (see [Agency CSV](#agency-csv)). New images are uploaded, a metadata change rewrites only
   the CSV, renames move the folder, and deletions made while sync is on are deleted on the
   cloud too. It is one-way, Wi-Fi only by default, and never touches images it did not
-  upload itself. The CSV is not shown in the app or the album; NextCloud is where you get it.
+  upload itself.
 - **Pulls everything back from NextCloud on request** - after reinstalling, or on a new
   phone, one tap downloads every event and image, with its title, description and keywords
   read from the event's CSV, or from the file itself for images the CSV does not list. It
@@ -64,19 +64,22 @@ both Adobe Stock and Shutterstock accept, synced to your NextCloud next to the p
 
 ## Agency CSV
 
-Each event's NextCloud folder holds one `metadata.csv`, rewritten whenever its metadata
-changes:
+Each event gets one `metadata.csv`, rewritten whenever its metadata changes. The phone keeps
+it in `Documents/StockReady/StockReady - <event>/`, mirroring the album's folder name, since
+Android allows only photos and videos under `Pictures`. With sync on, the event's NextCloud
+folder holds one too:
 
 ```csv
 Filename,Title,Description,Keywords,Category,Categories
 IMG_0001.jpg,Waves at dusk,"Belgrade, Serbia - May 23, 2026: Waves roll onto an empty beach.","beach, waves, dusk",11,Parks/Outdoor
 ```
 
-Upload the images to an agency, then upload this CSV in its metadata CSV form. Adobe Stock
+Upload the images to an agency, then upload the CSV in its metadata CSV form. Adobe Stock
 reads `Filename`, `Title`, `Keywords` and the numbered `Category` (mapped from the
 Shutterstock category); Shutterstock reads `Filename`, `Description`, `Keywords` and
-`Categories`. Only images already on NextCloud are listed, by their file name there. An image
-deleted while sync was off stays in the CSV for as long as its file stays in the folder.
+`Categories`. The phone's CSV lists the event's photos by their name in the album. The
+NextCloud copy lists only images already uploaded, by their name there, and an image deleted
+while sync was off stays in it for as long as its file stays in the folder.
 
 ## Uploading stays manual
 
@@ -86,8 +89,8 @@ for metadata, unless you generate on the device; to Hugging Face, once, if you d
 on-device model; and, only if you set up sync, to your own NextCloud server, as a backup copy of
 your events.
 
-All it prepares is files. Each event is its own folder under `Pictures/StockReady/` and on
-NextCloud. You pick the images, submit them yourself, and upload the event's CSV to fill in the
+All it prepares is files. Each event is its own folder under `Pictures/StockReady/`, with its
+CSV under `Documents/StockReady/`, and on NextCloud. You pick the images, submit them yourself, and upload the event's CSV to fill in the
 title, description and keywords, as you would with a CSV from Lightroom or another keywording
 tool.
 

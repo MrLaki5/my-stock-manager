@@ -37,9 +37,10 @@ data class ImageToSync(
 
 data class CsvFolderRow(val folderId: Long, val remoteName: String, val csvVersion: Long, val csvSyncedVersion: Long?)
 
+/** [fileName] is the cloud's name for the image, or the album's in the phone's copy of the CSV. */
 data class CsvImageRow(
     val imageId: Long,
-    val remoteFileName: String,
+    val fileName: String,
     val metadataVersion: Long,
     val title: String?,
     val description: String?,
@@ -50,10 +51,10 @@ data class CsvImageRow(
 ) {
     fun toCsvImage() = CsvImage(
         imageId = imageId,
-        fileName = remoteFileName,
+        fileName = fileName,
         metadataVersion = metadataVersion,
         row = title?.takeIf { keywords.isNotEmpty() }?.let {
-            CsvRow(remoteFileName, it, EditorialCaption.build(captionPlace, capturedOn, description.orEmpty()), keywords, category)
+            CsvRow(fileName, it, EditorialCaption.build(captionPlace, capturedOn, description.orEmpty()), keywords, category)
         },
     )
 }
@@ -269,7 +270,7 @@ abstract class SyncDao : SyncStore {
     // Only images already on the cloud, so the CSV never names a file that is not there.
     @Query(
         """
-        SELECT i.id AS imageId, s.remoteFileName AS remoteFileName, i.metadataVersion AS metadataVersion,
+        SELECT i.id AS imageId, s.remoteFileName AS fileName, i.metadataVersion AS metadataVersion,
             i.title AS title, i.description AS description, i.keywords AS keywords, i.category AS category,
             i.captionPlace AS captionPlace, i.capturedOn AS capturedOn
         FROM images i JOIN sync_images s ON s.imageId = i.id

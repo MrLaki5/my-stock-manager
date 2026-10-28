@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
 import com.mrlaki5.mystockmanager.nextcloud.SyncCoordinator
 import com.mrlaki5.mystockmanager.storage.AlbumWatcher
+import com.mrlaki5.mystockmanager.storage.PhoneCsv
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,7 @@ class MyStockManagerApp : Application(), Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var repository: StockRepository
     @Inject lateinit var albumWatcher: AlbumWatcher
+    @Inject lateinit var phoneCsv: PhoneCsv
 
     // Lazy so building it, and opening the Keystore-backed prefs it reads, happens off the main thread.
     @Inject lateinit var syncCoordinator: dagger.Lazy<SyncCoordinator>
@@ -46,5 +48,6 @@ class MyStockManagerApp : Application(), Configuration.Provider {
         }
         appScope.launch { syncCoordinator.get().start(appScope) }
         albumWatcher.start(appScope)
+        phoneCsv.start(appScope)
     }
 }

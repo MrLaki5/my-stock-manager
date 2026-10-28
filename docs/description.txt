@@ -1,4 +1,4 @@
-MyStockManager prepares your photos for stock agencies such as Adobe Stock and Shutterstock. Let AI draft a title, description, and keywords for each image, with OpenAI or with models that run on your phone, or write them yourself. Each event gets one CSV that both agencies accept, synced to your NextCloud.
+MyStockManager prepares your photos for stock agencies such as Adobe Stock and Shutterstock. Let AI draft a title, description, and keywords for each image, with OpenAI or with models that run on your phone, or write them yourself. Each event gets one CSV that both agencies accept, saved on your phone and synced to your NextCloud.
 
 HOW IT WORKS
 • Create an event for each shoot, day or theme.
@@ -8,7 +8,7 @@ HOW IT WORKS
 • Or write the metadata by hand. Open any image and type the title, description, keywords and category yourself.
 • Steer OpenAI with your own instructions by editing the system prompt in Settings. The on-device model doesn't use it.
 • Review and edit everything, including every keyword.
-• Save, and the event's CSV on your NextCloud is updated. Upload it after the photos and every field is filled in.
+• Save, and the event's CSV in Documents/StockReady is updated. Upload it after the photos and every field is filled in.
 
 BUILT FOR STOCK WORK
 • Keywords are capped at 49, so one set fits both Adobe Stock and Shutterstock, with a warning if you have fewer than 7.
@@ -38,7 +38,7 @@ YOU STAY IN CONTROL
 REQUIREMENTS
 • For AI drafting, either the on-device model (0.4 GB download, 64-bit ARM phone) or your own OpenAI API key, entered in Settings. OpenAI bills your API account for what you use. gpt-6-luna is much cheaper per image; gpt-6.1-sol gives stronger keywords. Higher reasoning costs more and is slower. With neither, you can still write all the metadata by hand.
 • JPEG photos.
-• A NextCloud server, to get the metadata CSV off the phone.
+• A NextCloud server, for sync. Optional.
 • Android 10 or later.
 
 MyStockManager is not affiliated with, endorsed by or sponsored by Adobe, Shutterstock, OpenAI, Hugging Face, Liquid AI or Google.

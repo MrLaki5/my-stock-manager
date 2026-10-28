@@ -1,6 +1,7 @@
 package com.mrlaki5.mystockmanager.data.db.dao
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.Query
 import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
@@ -9,6 +10,8 @@ import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import kotlinx.coroutines.flow.Flow
 
 data class AlbumRow(val id: Long, val mediaStoreUri: String, val albumState: AlbumState, val trashExpiresAt: Long?)
+
+data class EventCsvRow(val eventName: String, val mediaStoreUri: String, @Embedded val image: CsvImageRow)
 
 /** Fills an image that has no metadata from its file's; never overrides metadata the row already has. */
 internal const val ADOPT_EMBEDDED = """
@@ -161,6 +164,19 @@ interface ImageDao {
         state: ImageState,
         generatedAt: Long?,
     )
+
+    // Only photos in the album, since those are what get uploaded from the phone.
+    @Query(
+        """
+        SELECT f.name AS eventName, i.mediaStoreUri AS mediaStoreUri, i.id AS imageId, i.displayName AS fileName, i.metadataVersion AS metadataVersion,
+            i.title AS title, i.description AS description, i.keywords AS keywords, i.category AS category,
+            i.captionPlace AS captionPlace, i.capturedOn AS capturedOn
+        FROM images i JOIN folders f ON f.id = i.folderId
+        WHERE i.mediaStoreUri IS NOT NULL AND i.albumState = 'PRESENT' AND i.title IS NOT NULL
+        ORDER BY f.id, i.id
+        """
+    )
+    fun observeEventCsvRows(): Flow<List<EventCsvRow>>
 
     @Query("SELECT id, mediaStoreUri, albumState, trashExpiresAt FROM images WHERE mediaStoreUri IS NOT NULL")
     suspend fun getAlbumRows(): List<AlbumRow>
