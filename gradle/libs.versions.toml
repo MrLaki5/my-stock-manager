@@ -11,8 +11,8 @@ composeBom = "2026.02.01"
 okhttp = "5.5.0"
 kotlinxSerialization = "1.11.0"
 securityCrypto = "1.1.0"
-# Pinned exactly: commons-imaging has never had a GA release, and minor
-# alpha bumps have changed the metadata APIs before.
+# Read-only, for metadata embedded before the CSV. Pinned exactly: commons-imaging
+# has never had a GA release, and minor alpha bumps have changed the metadata APIs before.
 commonsImaging = "1.0.0-alpha6"
 xmpcore = "6.1.11"
 ksp = "2.2.10-2.0.2"

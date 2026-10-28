@@ -1,5 +1,7 @@
 package com.mrlaki5.mystockmanager.nextcloud
 
+import com.mrlaki5.mystockmanager.data.db.dao.CsvImageRow
+import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 import java.io.InputStream
 
 /** An in-memory [SyncStore] and [PullStore] that follow the same rules as SyncDao's and PullDao's SQL. */
@@ -14,13 +16,20 @@ class FakeSyncStore : SyncStore, PullStore {
         var category: String? = null
         var capturedOn: String? = null
         var captionPlace: String? = null
+        var metadataVersion = 1L
     }
-    data class SyncFolder(val remoteName: String, val localName: String)
+    data class SyncFolder(
+        val remoteName: String,
+        val localName: String,
+        var csvVersion: Long = 1,
+        var csvSyncedVersion: Long? = null,
+    )
     data class SyncImage(
         var remoteFileName: String,
         var syncedVersion: Long? = null,
         var remoteSize: Long? = null,
         var failedVersion: Long? = null,
+        var csvVersion: Long? = null,
     )
 
     val events = linkedMapOf<Long, Event>()
@@ -46,8 +55,21 @@ class FakeSyncStore : SyncStore, PullStore {
         images.getValue(imageId).fileVersion++
     }
 
+    fun describe(imageId: Long, title: String, keywords: List<String>, description: String = "A body.", category: String? = null) {
+        images.getValue(imageId).apply {
+            this.title = title
+            this.description = description
+            this.keywords = keywords
+            this.category = category
+            metadataVersion++
+        }
+    }
+
     fun deleteImage(imageId: Long, tombstone: Boolean = true) {
-        if (tombstone) remotePathOf(imageId)?.let { deletions += it }
+        if (tombstone) {
+            remotePathOf(imageId)?.let { deletions += it }
+            images[imageId]?.let { syncFolders[it.folderId] }?.let { it.csvVersion++ }
+        }
         images.remove(imageId)
         syncImages.remove(imageId)
     }
@@ -73,6 +95,17 @@ class FakeSyncStore : SyncStore, PullStore {
         return owed && sync?.failedVersion != image.fileVersion
     }
 
+    fun isCsvStale(folderId: Long): Boolean {
+        val folder = syncFolders[folderId] ?: return false
+        if (folder.csvSyncedVersion != null && folder.csvSyncedVersion != folder.csvVersion) return true
+        return csvImagesOf(folderId).any { (image, sync) -> sync.csvVersion != image.metadataVersion }
+    }
+
+    private fun csvImagesOf(folderId: Long): List<Pair<Image, SyncImage>> =
+        images.values.filter { it.folderId == folderId }.sortedBy { it.id }.mapNotNull { image ->
+            syncImages[image.id]?.takeIf { it.remoteSize != null }?.let { image to it }
+        }
+
     private fun remotePathOf(imageId: Long): String? {
         val image = images[imageId] ?: return null
         val file = syncImages[imageId]?.remoteFileName ?: return null
@@ -97,7 +130,7 @@ class FakeSyncStore : SyncStore, PullStore {
 
         val image = images.values.sortedBy { it.id }.firstOrNull { image ->
             isDirty(image) && syncFolders[image.folderId]?.localName == events[image.folderId]?.name
-        } ?: return null
+        } ?: return nextCsv()
         val sync = syncImages.getOrPut(image.id) {
             val taken = syncImages.filterKeys { images[it]?.folderId == image.folderId }.values.map { it.remoteFileName }
             SyncImage(RemoteNames.fileName(image.displayName, image.id, taken))
@@ -114,6 +147,25 @@ class FakeSyncStore : SyncStore, PullStore {
         )
     }
 
+    private fun nextCsv(): SyncAction? {
+        val folderId = syncFolders.keys.sorted().firstOrNull { id ->
+            syncFolders.getValue(id).localName == events[id]?.name && isCsvStale(id)
+        } ?: return null
+        val folder = syncFolders.getValue(folderId)
+        return SyncAction.WriteCsv(
+            folderId = folderId,
+            folder = folder.remoteName,
+            version = folder.csvVersion,
+            onCloud = folder.csvSyncedVersion != null,
+            images = csvImagesOf(folderId).map { (image, sync) ->
+                CsvImageRow(
+                    image.id, sync.remoteFileName, image.metadataVersion, image.title, image.description,
+                    image.keywords, image.category, image.captionPlace, image.capturedOn,
+                ).toCsvImage()
+            },
+        )
+    }
+
     override suspend fun dropDeletion(path: String) {
         deletions.remove(path)
     }
@@ -124,7 +176,12 @@ class FakeSyncStore : SyncStore, PullStore {
             deletions.removeAll(moved.toSet())
             moved.forEach { deletions += remoteName + it.removePrefix(movedFrom) }
         }
-        if (folderId in events) syncFolders[folderId] = SyncFolder(remoteName, localName) else deletions += remoteName
+        if (folderId in events) {
+            syncFolders[folderId] = syncFolders[folderId]?.copy(remoteName = remoteName, localName = localName)
+                ?: SyncFolder(remoteName, localName)
+        } else {
+            deletions += remoteName
+        }
     }
 
     override suspend fun forgetFolder(folderId: Long) {
@@ -155,6 +212,7 @@ class FakeSyncStore : SyncStore, PullStore {
             images = images.values.filter { it.folderId == id }.mapNotNull { image ->
                 syncImages[image.id]?.let { SyncedImage(image.id, it.remoteFileName, it.remoteSize) }
             },
+            csvOnCloud = folder.csvSyncedVersion != null,
         )
     }
 
@@ -166,6 +224,16 @@ class FakeSyncStore : SyncStore, PullStore {
         syncImages.values.forEach { it.failedVersion = null }
     }
 
+    override suspend fun commitCsv(folderId: Long, version: Long, images: List<CsvImage>, written: Boolean) {
+        images.forEach { syncImages[it.imageId]?.csvVersion = it.metadataVersion }
+        if (written) syncFolders[folderId]?.csvSyncedVersion = version
+    }
+
+    override suspend fun forgetCsv(folderId: Long) {
+        syncFolders[folderId]?.csvSyncedVersion = null
+        images.values.filter { it.folderId == folderId }.forEach { syncImages[it.id]?.csvVersion = null }
+    }
+
     override suspend fun pendingDeletions(): Set<String> = deletions.toSet()
 
     override suspend fun localFolders(): List<LocalFolder> =
@@ -174,7 +242,10 @@ class FakeSyncStore : SyncStore, PullStore {
     override suspend fun localImages(folderId: Long): List<LocalImage> =
         images.values.filter { it.folderId == folderId }.map { image ->
             val sync = syncImages[image.id]
-            LocalImage(image.id, image.displayName, image.uri, image.fileVersion, sync?.remoteFileName, sync?.syncedVersion, sync?.remoteSize)
+            LocalImage(
+                image.id, image.displayName, image.uri, image.fileVersion, image.capturedOn, image.title != null,
+                sync?.remoteFileName, sync?.syncedVersion, sync?.remoteSize,
+            )
         }
 
     override suspend fun createLinkedEvent(name: String, remoteName: String, now: Long): LocalFolder {
@@ -198,7 +269,9 @@ class FakeSyncStore : SyncStore, PullStore {
     override suspend fun insertPulled(folderId: Long, displayName: String, image: PulledImage, now: Long): Long {
         val id = nextId++
         images[id] = Image(id, folderId, displayName).also { it.fillFrom(image) }
-        syncImages[id] = SyncImage(image.remoteFileName, syncedVersion = 1, remoteSize = image.byteSize)
+        (image.csvMetadata ?: image.embeddedMetadata)?.let { images.getValue(id).fillFrom(it) }
+        val csvVersion = 1L.takeIf { image.csvMetadata != null || image.embeddedMetadata == null }
+        syncImages[id] = SyncImage(image.remoteFileName, syncedVersion = 1, remoteSize = image.byteSize, csvVersion = csvVersion)
         return id
     }
 
@@ -206,21 +279,51 @@ class FakeSyncStore : SyncStore, PullStore {
         val local = images.getValue(imageId)
         local.fileVersion++
         local.fillFrom(image)
-        syncImages[imageId] = SyncImage(image.remoteFileName, local.fileVersion, image.byteSize)
+        val csvVersion = syncImages[imageId]?.csvVersion
+        syncImages[imageId] = SyncImage(image.remoteFileName, local.fileVersion, image.byteSize, csvVersion = csvVersion)
+        image.csvMetadata?.let { applyMetadata(imageId, it, now) }
+            ?: image.embeddedMetadata?.let { adoptEmbedded(imageId, it, now) }
     }
 
     override suspend fun linkImage(imageId: Long, remoteFileName: String, size: Long) {
         syncImages[imageId] = SyncImage(remoteFileName, images.getValue(imageId).fileVersion, size)
     }
 
+    override suspend fun applyMetadata(imageId: Long, metadata: ParsedMetadata, now: Long): Boolean {
+        val local = images.getValue(imageId)
+        val same = local.title == metadata.title && local.description == metadata.description &&
+            local.captionPlace == metadata.captionPlace && local.keywords == metadata.keywords &&
+            local.category == metadata.category
+        if (!same) {
+            local.fillFrom(metadata)
+            local.metadataVersion++
+        }
+        syncImages[imageId]?.csvVersion = local.metadataVersion
+        return !same
+    }
+
+    override suspend fun adoptEmbedded(imageId: Long, metadata: ParsedMetadata, now: Long) {
+        val local = images.getValue(imageId)
+        if (local.title != null) return
+        local.fillFrom(metadata)
+        local.metadataVersion++
+    }
+
+    override suspend fun csvFound(folderId: Long) {
+        syncFolders[folderId]?.let { it.csvSyncedVersion = it.csvVersion }
+    }
+
     private fun Image.fillFrom(image: PulledImage) {
         uri = image.mediaStoreUri
-        title = image.title
-        description = image.description
-        keywords = image.keywords
-        category = image.category
         capturedOn = image.capturedOn
-        captionPlace = image.captionPlace
+    }
+
+    private fun Image.fillFrom(metadata: ParsedMetadata) {
+        title = metadata.title
+        description = metadata.description
+        keywords = metadata.keywords
+        category = metadata.category
+        captionPlace = metadata.captionPlace
     }
 }
 
@@ -269,7 +372,9 @@ class FakeDrive : RemoteDrive {
         folders -= source
         folders += target
         files.keys.filter { it.startsWith("$source/") }.forEach { key ->
-            files["$target/" + key.removePrefix("$source/")] = files.remove(key)!!
+            val moved = "$target/" + key.removePrefix("$source/")
+            files[moved] = files.remove(key)!!
+            bodies.remove(key)?.let { bodies[moved] = it }
         }
         return DavResult.Ok(MoveResult.MOVED)
     }
@@ -284,9 +389,10 @@ class FakeDrive : RemoteDrive {
         call("PUT $key")?.let { return it }
         if (path.first() !in folders) return DavResult.ParentMissing("missing")
         if (createOnly && key in files) return DavResult.Ok(PutResult.ALREADY_EXISTS)
-        val written = open().use { it.readBytes() }.size.toLong()
-        check(written == length) { "Wrote $written bytes but declared $length" }
+        val bytes = open().use { it.readBytes() }
+        check(bytes.size.toLong() == length) { "Wrote ${bytes.size} bytes but declared $length" }
         files[key] = length
+        bodies[key] = bytes
         return DavResult.Ok(PutResult.WRITTEN)
     }
 
@@ -296,8 +402,10 @@ class FakeDrive : RemoteDrive {
         if (path.size == 1) {
             folders -= key
             files.keys.removeAll { it.startsWith("$key/") }
+            bodies.keys.removeAll { it.startsWith("$key/") }
         } else {
             files.remove(key)
+            bodies.remove(key)
         }
         return DavResult.Ok(Unit)
     }
@@ -391,6 +499,6 @@ class FakeAlbum(private val dir: java.io.File) : PullAlbum {
     override fun dateTaken(uri: String): String? = null
 
     companion object {
-        val plain = InspectedImage(100, 100, null, null, null, emptyList(), null)
+        val plain = InspectedImage(100, 100, null, null)
     }
 }

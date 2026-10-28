@@ -20,7 +20,7 @@ enum class ImageState {
     /** A generation worker is running for this image. */
     GENERATING,
 
-    /** Metadata generated, embedded into the export copy, and read back verified. */
+    /** Metadata generated or written by hand. */
     GENERATED,
 
     /** Legacy: failures now restore the previous state, but rows written before that may still hold it. */
@@ -88,6 +88,10 @@ data class ImageEntity(
     val captionPlace: String? = null,
     /** Bumped each time the album file is rewritten, so sync knows the cloud copy is stale. */
     @ColumnInfo(defaultValue = "1") val fileVersion: Long = 1,
+    /** Bumped on every metadata change, so sync knows the event's CSV is stale. */
+    @ColumnInfo(defaultValue = "1") val metadataVersion: Long = 1,
+    /** The file has been read for metadata embedded before the CSV, so it is not read again. */
+    @ColumnInfo(defaultValue = "0") val embeddedChecked: Boolean = false,
     @ColumnInfo(defaultValue = "PRESENT") val albumState: AlbumState = AlbumState.PRESENT,
     /** When the system trash purges the file; null unless [albumState] is TRASHED and the trash said. */
     val trashExpiresAt: Long? = null,

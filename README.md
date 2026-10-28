@@ -2,16 +2,16 @@
 
 # MyStockManager
 
-**Android app that turns a shoot into upload-ready stock photos.** It writes the title,
-description and keywords into the JPEG itself, so the file you hand Adobe Stock or
-Shutterstock already carries its metadata.
+**Android app that turns a shoot into upload-ready stock photos.** It drafts the title,
+description and keywords for every image and keeps them in one CSV per event, in a format
+both Adobe Stock and Shutterstock accept, synced to your NextCloud next to the photos.
 
 <a href="https://play.google.com/store/apps/details?id=com.mrlaki5.mystockmanager"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80"></a>
 
 <p>
   <img src="docs/screenshot-1.png" alt="Event with every image generated" width="16%">
   <img src="docs/screenshot-2.png" alt="On-device generation in Settings: free, no API key" width="16%">
-  <img src="docs/screenshot-3.png" alt="Keywords and caption saved in the file" width="16%">
+  <img src="docs/screenshot-3.png" alt="Keywords and caption for one image" width="16%">
   <img src="docs/screenshot-4.png" alt="Title and description editor with character counts" width="16%">
   <img src="docs/screenshot-5.png" alt="Events list" width="16%">
   <img src="docs/screenshot-6.png" alt="Optional NextCloud sync in Settings" width="16%">
@@ -38,25 +38,45 @@ Shutterstock already carries its metadata.
   in the pixels, such as the place, subject or event; with OpenAI, a place it names leads the
   caption. The on-device option needs no API key, costs nothing, and the photo never leaves
   the phone; see [On-device generation](#on-device-generation).
-- **Embeds it losslessly** into IPTC IIM (APP13) and XMP (APP1). Segments are spliced;
-  pixels are never decoded or re-encoded.
-- **Verifies every write.** The embedded copy is read back and compared before the album
-  file is overwritten, so a failed embed can never damage an image you already have.
+- **Never writes into the photo files.** Metadata is kept in the app and written to the event's
+  CSV; the JPEGs in the album stay byte for byte as imported.
+- **Picks up metadata a photo already embeds.** An image with no metadata of its own takes
+  the IPTC/XMP title, caption and keywords from its file: on import (for example after
+  keywording in Lightroom), on Pull for images the CSV has no row for, and once for images
+  keyworded by versions of the app that wrote into the file. Sync then adds it to the CSV.
 - **Lets you write or correct anything by hand** - open an image to edit its title,
   description or category, and rename, reorder or remove an individual keyword. An image with
   no metadata yet gets the same editor, so you can write it yourself instead of generating it.
-  Saving rewrites the JPEG, not just the database.
 - **Runs generation in the background**, one worker per image, so one failure retries on its
   own without holding up the batch.
-- **Optionally syncs every event to NextCloud** - one folder per event under a path you
-  choose (`/my-stock-manager` by default). New and re-keyworded images are uploaded, renames
-  move the folder, and deletions made while sync is on are deleted on the cloud too. It is
-  one-way, Wi-Fi only by default, and never touches files it did not upload itself.
+- **Syncs every event to NextCloud, with its metadata CSV** - one folder per event under a
+  path you choose (`/my-stock-manager` by default), holding the images and a `metadata.csv`
+  (see [Agency CSV](#agency-csv)). New images are uploaded, a metadata change rewrites only
+  the CSV, renames move the folder, and deletions made while sync is on are deleted on the
+  cloud too. It is one-way, Wi-Fi only by default, and never touches images it did not
+  upload itself. The CSV is not shown in the app or the album; NextCloud is where you get it.
 - **Pulls everything back from NextCloud on request** - after reinstalling, or on a new
   phone, one tap downloads every event and image, with its title, description and keywords
-  read back out of the file. It never deletes anything on the phone.
+  read from the event's CSV, or from the file itself for images the CSV does not list. It
+  never deletes anything on the phone.
 - **Keeps your API key and NextCloud app password in EncryptedSharedPreferences**,
   Keystore-backed and excluded from backup.
+
+## Agency CSV
+
+Each event's NextCloud folder holds one `metadata.csv`, rewritten whenever its metadata
+changes:
+
+```csv
+Filename,Title,Description,Keywords,Category,Categories
+IMG_0001.jpg,Waves at dusk,"Belgrade, Serbia - May 23, 2026: Waves roll onto an empty beach.","beach, waves, dusk",11,Parks/Outdoor
+```
+
+Upload the images to an agency, then upload this CSV in its metadata CSV form. Adobe Stock
+reads `Filename`, `Title`, `Keywords` and the numbered `Category` (mapped from the
+Shutterstock category); Shutterstock reads `Filename`, `Description`, `Keywords` and
+`Categories`. Only images already on NextCloud are listed, by their file name there. An image
+deleted while sync was off stays in the CSV for as long as its file stays in the folder.
 
 ## Uploading stays manual
 
@@ -66,11 +86,10 @@ for metadata, unless you generate on the device; to Hugging Face, once, if you d
 on-device model; and, only if you set up sync, to your own NextCloud server, as a backup copy of
 your events.
 
-All it prepares is files. Each event is its own folder under `Pictures/StockReady/`, so when you
-open an agency's upload form and add files, the system picker already shows that shoot grouped
-together. You pick the images and submit them yourself. The title, description and keywords are
-already embedded in each file, so it works like uploading photos you keyworded in Lightroom or
-Bridge.
+All it prepares is files. Each event is its own folder under `Pictures/StockReady/` and on
+NextCloud. You pick the images, submit them yourself, and upload the event's CSV to fill in the
+title, description and keywords, as you would with a CSV from Lightroom or another keywording
+tool.
 
 The photos are never generated or altered. A model only drafts the text, or you write it
 yourself, and you can edit every field before it is written. It is still up to you to check
@@ -116,8 +135,8 @@ The app is built for arm64-v8a only, the ABI the on-device runtimes ship for.
 ./gradlew installDebug
 ```
 
-Kotlin · Jetpack Compose · Room · Hilt · WorkManager · Commons Imaging + Adobe XMPCore ·
-minSdk 29
+Kotlin · Jetpack Compose · Room · Hilt · WorkManager · Commons Imaging + Adobe XMPCore
+(reading only) · minSdk 29
 
 ## Release
 

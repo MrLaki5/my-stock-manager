@@ -2,7 +2,7 @@ package com.mrlaki5.mystockmanager.nextcloud
 
 import android.graphics.BitmapFactory
 import androidx.core.net.toUri
-import com.mrlaki5.mystockmanager.metadata.MetadataReader
+import com.mrlaki5.mystockmanager.metadata.EmbeddedMetadataReader
 import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.CaptureDate
 import com.mrlaki5.mystockmanager.storage.MediaStoreExporter
@@ -45,17 +45,7 @@ class PullAlbumFiles @Inject constructor(
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
         if (bounds.outWidth <= 0) return null
-        // A file with no readable metadata still comes in, just without a title or keywords.
-        val metadata = runCatching { MetadataReader.read(file) }.getOrNull()
-        return InspectedImage(
-            widthPx = bounds.outWidth,
-            heightPx = bounds.outHeight,
-            capturedOn = CaptureDate.readFrom(file),
-            title = metadata?.iptcTitle ?: metadata?.xmpTitle,
-            caption = metadata?.iptcDescription,
-            keywords = metadata?.iptcKeywords?.ifEmpty { metadata.xmpSubjects }.orEmpty(),
-            category = metadata?.xmpCategory,
-        )
+        return InspectedImage(bounds.outWidth, bounds.outHeight, CaptureDate.readFrom(file), EmbeddedMetadataReader.read(file))
     }
 
     override fun publish(file: File, displayName: String, eventName: String): String =

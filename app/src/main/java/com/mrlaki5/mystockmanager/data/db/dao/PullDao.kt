@@ -14,6 +14,7 @@ import com.mrlaki5.mystockmanager.nextcloud.LocalFolder
 import com.mrlaki5.mystockmanager.nextcloud.LocalImage
 import com.mrlaki5.mystockmanager.nextcloud.PullStore
 import com.mrlaki5.mystockmanager.nextcloud.PulledImage
+import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 
 @Dao
 abstract class PullDao : PullStore {
@@ -31,7 +32,8 @@ abstract class PullDao : PullStore {
     @Query(
         """
         SELECT i.id AS id, i.displayName AS displayName, i.mediaStoreUri AS mediaStoreUri,
-            i.fileVersion AS fileVersion, s.remoteFileName AS remoteFileName,
+            i.fileVersion AS fileVersion, i.capturedOn AS capturedOn, i.title IS NOT NULL AS hasMetadata,
+            s.remoteFileName AS remoteFileName,
             s.syncedVersion AS syncedVersion, s.remoteSize AS remoteSize
         FROM images i LEFT JOIN sync_images s ON s.imageId = i.id
         WHERE i.folderId = :folderId
@@ -57,6 +59,7 @@ abstract class PullDao : PullStore {
 
     @Transaction
     override suspend fun insertPulled(folderId: Long, displayName: String, image: PulledImage, now: Long): Long {
+        val metadata = image.csvMetadata ?: image.embeddedMetadata
         val id = insertImage(
             ImageEntity(
                 folderId = folderId,
@@ -67,47 +70,75 @@ abstract class PullDao : PullStore {
                 byteSize = image.byteSize,
                 importedAt = now,
                 capturedOn = image.capturedOn,
-                state = stateOf(image),
-                title = image.title,
-                description = image.description,
-                captionPlace = image.captionPlace,
-                keywords = image.keywords,
-                category = image.category,
-                generatedAt = now.takeIf { image.generated },
+                state = if (metadata?.generated == true) ImageState.GENERATED else ImageState.FILED,
+                title = metadata?.title,
+                description = metadata?.description,
+                captionPlace = metadata?.captionPlace,
+                keywords = metadata?.keywords.orEmpty(),
+                category = metadata?.category,
+                generatedAt = now.takeIf { metadata?.generated == true },
                 mediaStoreUri = image.mediaStoreUri,
+                embeddedChecked = true,
             )
         )
-        upsertSyncImage(SyncImageEntity(id, image.remoteFileName, syncedVersion = 1, remoteSize = image.byteSize))
+        // Matches the cloud CSV, row or no row, unless the metadata came from the file and is not in it yet.
+        val csvVersion = 1L.takeIf { image.csvMetadata != null || image.embeddedMetadata == null }
+        upsertSyncImage(SyncImageEntity(id, image.remoteFileName, syncedVersion = 1, remoteSize = image.byteSize, csvVersion = csvVersion))
         return id
     }
 
     @Transaction
     override suspend fun replacePulled(imageId: Long, image: PulledImage, now: Long) {
-        updatePulled(
+        updatePulledFile(
             id = imageId,
             sha256 = image.sha256,
             widthPx = image.widthPx,
             heightPx = image.heightPx,
             byteSize = image.byteSize,
             capturedOn = image.capturedOn,
-            state = stateOf(image),
-            title = image.title,
-            description = image.description,
-            captionPlace = image.captionPlace,
-            keywords = image.keywords,
-            category = image.category,
-            generatedAt = now.takeIf { image.generated },
             mediaStoreUri = image.mediaStoreUri,
         )
         // The bumped version is recorded as synced, so the replaced file is not uploaded straight back.
-        upsertSyncImage(SyncImageEntity(imageId, image.remoteFileName, fileVersionOf(imageId), image.byteSize))
+        upsertSyncImage(
+            SyncImageEntity(imageId, image.remoteFileName, fileVersionOf(imageId), image.byteSize, csvVersion = csvVersionOf(imageId)),
+        )
+        image.csvMetadata?.let { applyMetadata(imageId, it, now) }
+            ?: image.embeddedMetadata?.let { adoptEmbedded(imageId, it, now) }
     }
 
     @Transaction
     override suspend fun linkImage(imageId: Long, remoteFileName: String, size: Long) =
         upsertSyncImage(SyncImageEntity(imageId, remoteFileName, fileVersionOf(imageId), size))
 
-    private fun stateOf(image: PulledImage) = if (image.generated) ImageState.GENERATED else ImageState.FILED
+    @Transaction
+    override suspend fun applyMetadata(imageId: Long, metadata: ParsedMetadata, now: Long): Boolean {
+        val changed = updateMetadataIfDifferent(
+            id = imageId,
+            title = metadata.title,
+            description = metadata.description,
+            captionPlace = metadata.captionPlace,
+            keywords = metadata.keywords,
+            category = metadata.category,
+            state = if (metadata.generated) ImageState.GENERATED else ImageState.FILED,
+            generatedAt = now.takeIf { metadata.generated },
+        ) > 0
+        markInCsv(imageId)
+        return changed
+    }
+
+    override suspend fun adoptEmbedded(imageId: Long, metadata: ParsedMetadata, now: Long) = adoptEmbeddedInto(
+        id = imageId,
+        title = metadata.title,
+        description = metadata.description,
+        captionPlace = metadata.captionPlace,
+        keywords = metadata.keywords,
+        category = metadata.category,
+        state = if (metadata.generated) ImageState.GENERATED else ImageState.FILED,
+        generatedAt = now.takeIf { metadata.generated },
+    )
+
+    @Query("UPDATE sync_folders SET csvSyncedVersion = csvVersion WHERE folderId = :folderId")
+    abstract override suspend fun csvFound(folderId: Long)
 
     @Query("SELECT path FROM remote_deletions")
     protected abstract suspend fun deletionPaths(): List<String>
@@ -120,6 +151,9 @@ abstract class PullDao : PullStore {
 
     @Query("SELECT fileVersion FROM images WHERE id = :imageId")
     protected abstract suspend fun fileVersionOf(imageId: Long): Long
+
+    @Query("SELECT csvVersion FROM sync_images WHERE imageId = :imageId")
+    protected abstract suspend fun csvVersionOf(imageId: Long): Long?
 
     @Insert
     protected abstract suspend fun insertFolder(folder: FolderEntity): Long
@@ -137,28 +171,63 @@ abstract class PullDao : PullStore {
         """
         UPDATE images
         SET sha256 = :sha256, widthPx = :widthPx, heightPx = :heightPx, byteSize = :byteSize,
-            capturedOn = :capturedOn, state = :state, title = :title, description = :description,
-            captionPlace = :captionPlace,
-            keywords = :keywords, category = :category, generatedAt = :generatedAt,
-            mediaStoreUri = :mediaStoreUri, generationError = NULL, fileVersion = fileVersion + 1,
-            albumState = 'PRESENT', trashExpiresAt = NULL
+            capturedOn = :capturedOn, mediaStoreUri = :mediaStoreUri, fileVersion = fileVersion + 1,
+            albumState = 'PRESENT', trashExpiresAt = NULL, embeddedChecked = 1
         WHERE id = :id
         """
     )
-    protected abstract suspend fun updatePulled(
+    protected abstract suspend fun updatePulledFile(
         id: Long,
         sha256: String,
         widthPx: Int,
         heightPx: Int,
         byteSize: Long,
         capturedOn: String?,
-        state: ImageState,
-        title: String?,
-        description: String?,
-        captionPlace: String?,
-        keywords: List<String>,
-        category: String?,
-        generatedAt: Long?,
         mediaStoreUri: String,
     )
+
+    // Leaves an identical row alone, so pulling again is not reported as an update.
+    @Query(
+        """
+        UPDATE images
+        SET title = :title, description = :description, captionPlace = :captionPlace,
+            keywords = :keywords, category = :category, state = :state, generatedAt = :generatedAt,
+            generationError = NULL, metadataVersion = metadataVersion + 1
+        WHERE id = :id AND state != 'GENERATING' AND NOT (title IS :title AND description IS :description
+            AND captionPlace IS :captionPlace AND keywords IS :keywords AND category IS :category)
+        """
+    )
+    protected abstract suspend fun updateMetadataIfDifferent(
+        id: Long,
+        title: String?,
+        description: String?,
+        captionPlace: String,
+        keywords: List<String>,
+        category: String?,
+        state: ImageState,
+        generatedAt: Long?,
+    ): Int
+
+    @Query(
+        """
+        UPDATE images
+        SET title = :title, description = :description, captionPlace = :captionPlace,
+            keywords = :keywords, category = :category, state = :state, generatedAt = :generatedAt,
+            generationError = NULL, metadataVersion = metadataVersion + 1
+        WHERE id = :id AND title IS NULL AND state != 'GENERATING'
+        """
+    )
+    protected abstract suspend fun adoptEmbeddedInto(
+        id: Long,
+        title: String?,
+        description: String?,
+        captionPlace: String,
+        keywords: List<String>,
+        category: String?,
+        state: ImageState,
+        generatedAt: Long?,
+    )
+
+    @Query("UPDATE sync_images SET csvVersion = (SELECT metadataVersion FROM images WHERE id = :imageId) WHERE imageId = :imageId")
+    protected abstract suspend fun markInCsv(imageId: Long)
 }

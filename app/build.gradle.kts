@@ -72,6 +72,11 @@ android {
     buildFeatures {
         compose = true
     }
+    // Builds JPEGs with embedded metadata for both JVM and device tests.
+    sourceSets {
+        getByName("test").kotlin.directories.add("src/sharedTest/java")
+        getByName("androidTest").kotlin.directories.add("src/sharedTest/java")
+    }
     packaging {
         resources {
             // commons-imaging pulls commons-io + commons-lang3; all three ship

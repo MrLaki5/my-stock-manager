@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.data.db.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
@@ -22,4 +23,8 @@ data class SyncFolderEntity(
     val remoteName: String,
     /** The event name at the last create or move; a mismatch means a rename is pending. */
     val localName: String,
+    /** Bumped when a deletion leaves the CSV on the cloud listing a file it should not. */
+    @ColumnInfo(defaultValue = "1") val csvVersion: Long = 1,
+    /** The [csvVersion] last written; null means the app has not written this folder's CSV. */
+    val csvSyncedVersion: Long? = null,
 )

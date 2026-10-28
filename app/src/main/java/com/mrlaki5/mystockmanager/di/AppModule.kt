@@ -8,8 +8,6 @@ import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
 import com.mrlaki5.mystockmanager.data.db.dao.PullDao
 import com.mrlaki5.mystockmanager.data.db.dao.SyncDao
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
-import com.mrlaki5.mystockmanager.metadata.CommonsImagingMetadataWriter
-import com.mrlaki5.mystockmanager.metadata.MetadataWriter
 import com.mrlaki5.mystockmanager.nextcloud.AlbumFiles
 import com.mrlaki5.mystockmanager.nextcloud.LocalFiles
 import com.mrlaki5.mystockmanager.nextcloud.NextcloudSettings
@@ -46,6 +44,7 @@ object AppModule {
                 StockDatabase.MIGRATION_5_6,
                 StockDatabase.MIGRATION_6_7,
                 StockDatabase.MIGRATION_7_8,
+                StockDatabase.MIGRATION_8_9,
             )
             .build()
 
@@ -78,11 +77,6 @@ object AppModule {
     @Provides
     @Singleton
     fun openAiClient(): OpenAiClient = OpenAiClient()
-
-    /** Interfaced so the Commons Imaging implementation can be swapped wholesale. */
-    @Provides
-    @Singleton
-    fun metadataWriter(): MetadataWriter = CommonsImagingMetadataWriter()
 
     // The sync engine sees only these narrow interfaces, so its tests can run on the JVM.
     @Provides

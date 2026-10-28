@@ -21,15 +21,15 @@
 #-renamesourcefileattribute SourceFile
 # --- Commons Imaging ---
 # The library references java.awt / javax.imageio, neither of which exists on
-# Android. The IPTC/XMP rewrite path never executes those instructions (see the
+# Android. The IPTC/XMP read path never executes those instructions (see the
 # Phase 0 notes in the plan), but R8 still needs to be told not to fail on the
 # dangling references.
 -dontwarn java.awt.**
 -dontwarn javax.imageio.**
 -dontwarn org.apache.commons.imaging.color.**
 
-# Keep the metadata rewrite entry points; they are reached reflectively-free but
-# shrinking has previously stripped the IPTC constant tables.
+# Keep the metadata read path; it is reached reflectively-free but shrinking has
+# previously stripped the IPTC constant tables.
 -keep class org.apache.commons.imaging.formats.jpeg.iptc.** { *; }
 -keep class org.apache.commons.imaging.formats.jpeg.xmp.** { *; }
 -keep class com.adobe.internal.xmp.** { *; }

@@ -22,10 +22,6 @@ data class AlbumEntry(val trashed: Boolean, val expiresAt: Long?)
  * the moment it is imported — there is deliberately no second private copy to drift
  * out of sync with this one.
  *
- * Generation rewrites these files in place. That is safe because Commons Imaging's
- * rewriters replace their segment rather than appending: `writeIptc` strips the
- * existing APP13 before inserting, and `updateXmpXml` does the same for APP1.
- *
  * On minSdk 29 scoped storage is always on and inserting our own media needs no
  * runtime permission.
  */
@@ -101,7 +97,7 @@ class MediaStoreExporter(private val context: Context) {
         }
     }.getOrNull()
 
-    /** Current byte length, or null if the entry is gone; the row's byteSize is stale after an embed. */
+    /** Current byte length, or null if the entry is gone; the row's byteSize can be stale. */
     fun sizeOf(uri: Uri): Long? = runCatching {
         context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
     }.getOrNull()?.takeIf { it >= 0 }

@@ -1,8 +1,8 @@
 package com.mrlaki5.mystockmanager.metadata
 
 import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
-import com.mrlaki5.mystockmanager.metadata.model.IPTC_CAPTION_MAX
-import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
+import com.mrlaki5.mystockmanager.metadata.model.DESCRIPTION_MAX
+import com.mrlaki5.mystockmanager.metadata.model.TITLE_MAX
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -69,22 +69,22 @@ class EditorialCaptionTest {
     }
 
     @Test
-    fun `a caption sits far inside the IPTC description limit`() {
+    fun `a caption sits far inside the description limit`() {
         val caption = EditorialCaption.build("Belgrade, Serbia", "2026-05-23", body)
         val metadata = StockMetadata("Short title", caption, listOf("belgrade")).normalized()
 
         // The description is the roomy field; nothing is clamped away from a caption.
         assertEquals(caption, metadata.description)
-        assertTrue(caption.length < IPTC_CAPTION_MAX)
+        assertTrue(caption.length < DESCRIPTION_MAX)
     }
 
     @Test
     fun `the title is untouched by captioning and keeps its own limit`() {
         val long = "A marketable title that runs well past the sixty-four character cap " +
-            "the IPTC object name field imposes on it"
+            "the app keeps titles under"
         val metadata = StockMetadata(long, "d", listOf("k")).normalized()
 
-        assertEquals(IPTC_OBJECT_NAME_MAX, metadata.title.length)
+        assertEquals(TITLE_MAX, metadata.title.length)
         assertTrue(long.startsWith(metadata.title))
     }
 
@@ -112,14 +112,6 @@ class EditorialCaptionTest {
         val caption = EditorialCaption.build("Vevey, Switzerland", null, body)
         assertEquals(EditorialCaption.Parts("Vevey, Switzerland", body), EditorialCaption.parse(caption, null, "Vevey, Switzerland"))
         assertEquals(EditorialCaption.Parts(null, caption), EditorialCaption.parse(caption, null, null))
-    }
-
-    @Test
-    fun `placeOf reads each image's own place from its caption and stored body`() {
-        assertEquals("Kotor, Montenegro", EditorialCaption.placeOf(EditorialCaption.build("Kotor, Montenegro", "2026-05-23", body), body, "2026-05-23"))
-        assertEquals("Vevey, Switzerland", EditorialCaption.placeOf(EditorialCaption.build("Vevey, Switzerland", null, body), body, null))
-        assertEquals(null, EditorialCaption.placeOf(EditorialCaption.build(null, "2026-05-23", body), body, "2026-05-23"))
-        assertEquals(null, EditorialCaption.placeOf(body, body, null))
     }
 
     @Test

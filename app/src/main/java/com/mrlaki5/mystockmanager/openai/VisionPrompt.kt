@@ -1,6 +1,6 @@
 package com.mrlaki5.mystockmanager.openai
 
-import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
+import com.mrlaki5.mystockmanager.metadata.model.TITLE_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
 
@@ -25,7 +25,7 @@ object VisionPrompt {
         You are given one photograph. Describe only what is actually visible; never invent
         brands, names, or events you cannot see.
 
-        Title: a marketable, descriptive title of at most $IPTC_OBJECT_NAME_MAX characters.
+        Title: a marketable, descriptive title of at most $TITLE_MAX characters.
         No keyword stuffing, no camera settings, no filename-style text.
 
         Description: the body of an editorial caption, one or two sentences, stating plainly

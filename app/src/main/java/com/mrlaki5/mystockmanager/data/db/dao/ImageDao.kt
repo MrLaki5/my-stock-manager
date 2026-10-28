@@ -40,7 +40,7 @@ interface ImageDao {
         SET title = :title, description = :description, keywords = :keywords,
             category = :category, state = :state, generatedAt = :generatedAt,
             model = :model, captionPlace = :captionPlace, generationError = NULL,
-            fileVersion = fileVersion + 1
+            metadataVersion = metadataVersion + 1
         WHERE id = :id
         """
     )
@@ -64,7 +64,7 @@ interface ImageDao {
         """
         UPDATE images
         SET title = :title, description = :description, keywords = :keywords,
-            category = :category, fileVersion = fileVersion + 1
+            category = :category, metadataVersion = metadataVersion + 1
         WHERE id = :id
         """
     )
@@ -86,7 +86,7 @@ interface ImageDao {
         SET title = :title, description = :description, keywords = :keywords,
             category = :category, state = :state, generatedAt = :writtenAt,
             captionPlace = COALESCE(captionPlace, ''), generationError = NULL,
-            fileVersion = fileVersion + 1
+            metadataVersion = metadataVersion + 1
         WHERE id = :id
         """
     )
@@ -128,11 +128,35 @@ interface ImageDao {
     @Query("UPDATE images SET capturedOn = :capturedOn WHERE id = :id")
     suspend fun setCapturedOn(id: Long, capturedOn: String?)
 
-    @Query("SELECT * FROM images WHERE captionPlace IS NULL AND description IS NOT NULL AND mediaStoreUri IS NOT NULL")
-    suspend fun getWithoutCaptionPlace(): List<ImageEntity>
+    @Query(
+        "SELECT * FROM images WHERE embeddedChecked = 0 AND title IS NULL AND state != 'GENERATING' " +
+            "AND mediaStoreUri IS NOT NULL AND albumState = 'PRESENT'"
+    )
+    suspend fun getUncheckedForEmbedded(): List<ImageEntity>
 
-    @Query("UPDATE images SET captionPlace = :place WHERE id = :id")
-    suspend fun setCaptionPlace(id: Long, place: String)
+    @Query("UPDATE images SET embeddedChecked = 1 WHERE id = :id")
+    suspend fun markEmbeddedChecked(id: Long)
+
+    /** Fills an image that has no metadata from its file's; never overrides metadata the row already has. */
+    @Query(
+        """
+        UPDATE images
+        SET title = :title, description = :description, captionPlace = :captionPlace,
+            keywords = :keywords, category = :category, state = :state, generatedAt = :generatedAt,
+            generationError = NULL, metadataVersion = metadataVersion + 1, embeddedChecked = 1
+        WHERE id = :id AND title IS NULL AND state != 'GENERATING'
+        """
+    )
+    suspend fun adoptEmbedded(
+        id: Long,
+        title: String?,
+        description: String?,
+        captionPlace: String,
+        keywords: List<String>,
+        category: String?,
+        state: ImageState,
+        generatedAt: Long?,
+    )
 
     @Query("SELECT id, mediaStoreUri, albumState, trashExpiresAt FROM images WHERE mediaStoreUri IS NOT NULL")
     suspend fun getAlbumRows(): List<AlbumRow>
