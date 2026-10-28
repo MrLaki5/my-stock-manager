@@ -10,8 +10,12 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
+import com.mrlaki5.mystockmanager.metadata.AgencyCsv
 import java.io.File
 import java.io.InputStream
+
+/** One of the app's event CSVs; MediaStore keeps the type a file was created with. */
+data class StoredCsv(val uri: Uri, val mimeType: String?)
 
 /** One album file as MediaStore reports it to the app that owns it. */
 data class AlbumEntry(val trashed: Boolean, val expiresAt: Long?)
@@ -190,6 +194,84 @@ class MediaStoreExporter(private val context: Context) {
         return uris
     }
 
+    /** File names by MediaStore id, which can differ from the name asked for: MediaStore swaps characters like ':' for '_'. */
+    fun displayNames(ids: Collection<Long>): Map<Long, String>? {
+        val found = mutableMapOf<Long, String>()
+        // Chunked because API 29's SQLite caps a statement at 999 bound variables.
+        for (chunk in ids.chunked(500)) {
+            context.contentResolver.query(
+                collection,
+                arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
+                "${MediaStore.MediaColumns._ID} IN (${chunk.joinToString(",") { "?" }})",
+                chunk.map(Long::toString).toTypedArray(),
+                null,
+            )?.use { cursor ->
+                while (cursor.moveToNext()) found[cursor.getLong(0)] = cursor.getString(1)
+            } ?: return null
+        }
+        return found
+    }
+
+    /** The app's event CSVs under [CSV_ROOT] by relative path; null when MediaStore could not be read. */
+    fun eventCsvs(): Map<String, StoredCsv>? {
+        val files = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val found = mutableMapOf<String, StoredCsv>()
+        context.contentResolver.query(
+            files,
+            arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.MediaColumns.MIME_TYPE),
+            "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} = ?",
+            arrayOf("$CSV_ROOT/%", AgencyCsv.FILE_NAME),
+            null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                found[cursor.getString(1)] = StoredCsv(ContentUris.withAppendedId(files, cursor.getLong(0)), cursor.getString(2))
+            }
+        } ?: return null
+        return found
+    }
+
+    /** Writes an event's CSV into Documents, since MediaStore keeps anything but images and video out of Pictures. */
+    fun writeEventCsv(relativePath: String, bytes: ByteArray, existing: Uri?) {
+        val resolver = context.contentResolver
+        if (existing != null) {
+            resolver.update(existing, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 1) }, null, null)
+            resolver.openOutputStream(existing, "wt")?.use { it.write(bytes) } ?: error("Could not open $existing for writing")
+            finishCsv(existing)
+            return
+        }
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, AgencyCsv.FILE_NAME)
+            put(MediaStore.MediaColumns.MIME_TYPE, CSV_MIME_TYPE)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+            ?: error("MediaStore refused to create $relativePath${AgencyCsv.FILE_NAME}")
+        try {
+            resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("Could not open $uri for writing")
+            finishCsv(uri)
+        } catch (e: Exception) {
+            resolver.delete(uri, null, null)
+            throw e
+        }
+    }
+
+    private fun finishCsv(uri: Uri) {
+        context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        retypeCsv(uri)
+    }
+
+    // Finishing a .csv scans it as "text/comma-separated-values"; only a separate update afterwards keeps "text/csv".
+    fun retypeCsv(uri: Uri) {
+        context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.MIME_TYPE, CSV_MIME_TYPE) }, null, null)
+    }
+
+    fun readBytes(uri: Uri): ByteArray? = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+    }.getOrNull()
+
+    fun deleteFile(uri: Uri): Int = context.contentResolver.delete(uri, null, null)
+
     private inline fun <T> withTrashed(modern: (Bundle) -> T, legacy: () -> T): T =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) modern(matchTrashed()) else legacy()
 
@@ -198,6 +280,10 @@ class MediaStoreExporter(private val context: Context) {
 
     companion object {
         const val ALBUM_ROOT = "Pictures/StockReady"
+        const val CSV_ROOT = "Documents/StockReady"
+
+        // Not Android's own "text/comma-separated-values", which Adobe Stock's upload picker greys out.
+        const val CSV_MIME_TYPE = "text/csv"
 
         /** The MediaStore id at the end of an entry URI, or null if it does not end in one. */
         fun idOf(uri: String): Long? = uri.substringAfterLast('/').toLongOrNull()
@@ -222,5 +308,8 @@ class MediaStoreExporter(private val context: Context) {
                 .ifBlank { "Unnamed event" }
 
         fun relativePathFor(eventName: String): String = "$ALBUM_ROOT/${albumNameFor(eventName)}/"
+
+        /** Mirrors the event's album folder, under Documents. */
+        fun csvPathFor(eventName: String): String = "$CSV_ROOT/${albumNameFor(eventName)}/"
     }
 }
