@@ -25,12 +25,15 @@ class WebDavDrives @Inject constructor() : RemoteDriveFactory {
 @Singleton
 class AlbumFiles @Inject constructor(
     private val mediaStore: MediaStoreExporter,
+    private val fileStore: AppFileStore,
 ) : LocalFiles {
 
     override fun sizeOf(uri: String): Long? = mediaStore.sizeOf(uri.toUri())
 
     override fun open(uri: String): InputStream =
         mediaStore.openInput(uri.toUri()) ?: throw FileNotFoundException("Could not open $uri")
+
+    override fun newTempFile(): File = fileStore.newTempFile("csv")
 }
 
 @Singleton

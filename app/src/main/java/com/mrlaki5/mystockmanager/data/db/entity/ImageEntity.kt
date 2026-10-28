@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 
 /**
  * Where an image sits in the pipeline. Each stage is entered by an explicit user
@@ -24,7 +25,12 @@ enum class ImageState {
     GENERATED,
 
     /** Legacy: failures now restore the previous state, but rows written before that may still hold it. */
-    GENERATION_FAILED,
+    GENERATION_FAILED;
+
+    companion object {
+        /** Where metadata from a CSV or a file puts an image: generated only when it is complete. */
+        fun of(metadata: ParsedMetadata?): ImageState = if (metadata?.generated == true) GENERATED else FILED
+    }
 }
 
 /** What MediaStore says about the album file, refreshed by `AlbumWatcher`. */

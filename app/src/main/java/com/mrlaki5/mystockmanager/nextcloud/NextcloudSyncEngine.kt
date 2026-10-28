@@ -23,6 +23,8 @@ fun interface RemoteDriveFactory {
 interface LocalFiles {
     fun sizeOf(uri: String): Long?
     fun open(uri: String): InputStream
+
+    fun newTempFile(): File
 }
 
 /** Commits each step before picking the next, so a run stopped anywhere resumes without redoing work. */
@@ -180,11 +182,11 @@ class NextcloudSyncEngine @Inject constructor(
                 is DavResult.ParentMissing -> return done { store.forgetFolder(action.folderId) }
                 is DavResult.Failure -> return listing.toOutcome()
             }
-            val archived = when (val result = archivedRows(action, entries)) {
+            val kept = when (val result = cloudOnlyRows(action, entries)) {
                 is DavResult.Ok -> result.value
                 is DavResult.Failure -> return result.toOutcome()
             }
-            val merged = rows + archived
+            val merged = rows + kept
             if (merged.isEmpty() && entries.none { it.name == AgencyCsv.FILE_NAME }) {
                 return done { store.commitCsv(action.folderId, action.version, action.images, written = false) }
             }
@@ -198,21 +200,21 @@ class NextcloudSyncEngine @Inject constructor(
             }
         }
 
-        /** Rows for files still on the cloud that the phone no longer has, such as images deleted with sync off. */
-        private suspend fun archivedRows(action: SyncAction.WriteCsv, entries: List<DavEntry>): DavResult<List<CsvRow>> {
+        /** Cloud rows for files the phone has no row of its own for: deleted with sync off, or with metadata from another device. */
+        private suspend fun cloudOnlyRows(action: SyncAction.WriteCsv, entries: List<DavEntry>): DavResult<List<CsvRow>> {
             if (entries.none { it.name == AgencyCsv.FILE_NAME && !it.isCollection }) return DavResult.Ok(emptyList())
-            val temp = File.createTempFile("metadata", ".csv")
+            val temp = files.newTempFile()
             try {
                 when (val result = drive.download(listOf(action.folder, AgencyCsv.FILE_NAME), temp)) {
                     is DavResult.Ok -> if (!result.value) return DavResult.Ok(emptyList())
                     is DavResult.Failure -> return result
                 }
                 val onCloud = entries.filterNot { it.isCollection }.map { it.name }.toSet()
-                val local = action.images.map { it.fileName }.toSet()
-                val archived = AgencyCsv.read(temp.readBytes()).values
+                val local = action.images.filter { it.row != null }.map { it.fileName }.toSet()
+                val kept = AgencyCsv.read(temp.readBytes()).values
                     .filter { it.fileName in onCloud && it.fileName !in local }
                     .sortedBy { it.fileName }
-                return DavResult.Ok(archived)
+                return DavResult.Ok(kept)
             } finally {
                 temp.delete()
             }

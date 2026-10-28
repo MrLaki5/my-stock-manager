@@ -17,6 +17,7 @@ class FakeSyncStore : SyncStore, PullStore {
         var capturedOn: String? = null
         var captionPlace: String? = null
         var metadataVersion = 1L
+        var generating = false
     }
     data class SyncFolder(
         val remoteName: String,
@@ -97,6 +98,7 @@ class FakeSyncStore : SyncStore, PullStore {
 
     fun isCsvStale(folderId: Long): Boolean {
         val folder = syncFolders[folderId] ?: return false
+        if (images.values.any { it.folderId == folderId && it.generating }) return false
         if (folder.csvSyncedVersion != null && folder.csvSyncedVersion != folder.csvVersion) return true
         return csvImagesOf(folderId).any { (image, sync) -> sync.csvVersion != image.metadataVersion }
     }
@@ -226,7 +228,7 @@ class FakeSyncStore : SyncStore, PullStore {
 
     override suspend fun commitCsv(folderId: Long, version: Long, images: List<CsvImage>, written: Boolean) {
         images.forEach { syncImages[it.imageId]?.csvVersion = it.metadataVersion }
-        if (written) syncFolders[folderId]?.csvSyncedVersion = version
+        syncFolders[folderId]?.csvSyncedVersion = version.takeIf { written }
     }
 
     override suspend fun forgetCsv(folderId: Long) {
@@ -243,7 +245,8 @@ class FakeSyncStore : SyncStore, PullStore {
         images.values.filter { it.folderId == folderId }.map { image ->
             val sync = syncImages[image.id]
             LocalImage(
-                image.id, image.displayName, image.uri, image.fileVersion, image.capturedOn, image.title != null,
+                image.id, image.displayName, image.uri, image.fileVersion, image.capturedOn, image.title,
+                image.description, image.captionPlace, image.keywords, image.category,
                 sync?.remoteFileName, sync?.syncedVersion, sync?.remoteSize,
             )
         }
@@ -278,6 +281,7 @@ class FakeSyncStore : SyncStore, PullStore {
     override suspend fun replacePulled(imageId: Long, image: PulledImage, now: Long) {
         val local = images.getValue(imageId)
         local.fileVersion++
+        if (local.capturedOn != image.capturedOn) local.metadataVersion++
         local.fillFrom(image)
         val csvVersion = syncImages[imageId]?.csvVersion
         syncImages[imageId] = SyncImage(image.remoteFileName, local.fileVersion, image.byteSize, csvVersion = csvVersion)
@@ -291,9 +295,10 @@ class FakeSyncStore : SyncStore, PullStore {
 
     override suspend fun applyMetadata(imageId: Long, metadata: ParsedMetadata, now: Long): Boolean {
         val local = images.getValue(imageId)
-        val same = local.title == metadata.title && local.description == metadata.description &&
-            local.captionPlace == metadata.captionPlace && local.keywords == metadata.keywords &&
-            local.category == metadata.category
+        val same = local.title.orEmpty() == metadata.title.orEmpty() &&
+            local.description.orEmpty() == metadata.description.orEmpty() &&
+            local.captionPlace.orEmpty() == metadata.captionPlace && local.keywords == metadata.keywords &&
+            local.category.orEmpty() == metadata.category.orEmpty()
         if (!same) {
             local.fillFrom(metadata)
             local.metadataVersion++
@@ -456,6 +461,8 @@ class FakeFiles : LocalFiles {
     override fun sizeOf(uri: String): Long? = bytes[uri]?.size?.toLong()
 
     override fun open(uri: String): InputStream = bytes.getValue(uri).inputStream()
+
+    override fun newTempFile(): java.io.File = java.io.File.createTempFile("csv", ".tmp").apply { deleteOnExit() }
 }
 
 class FakeFlags(override var account: NextcloudAccount?) : SyncFlags {

@@ -1,19 +1,15 @@
 package com.mrlaki5.mystockmanager.metadata
 
-/** One image's line in an event's CSV; [description] is the full caption, lead included. */
+/** One image's line in an event's CSV; [description] is the full caption. Read back, null is a field the CSV does not give. */
 data class CsvRow(
     val fileName: String,
     val title: String,
-    val description: String,
-    val keywords: List<String>,
+    val description: String?,
+    val keywords: List<String>?,
     val category: String?,
 )
 
-/**
- * The one metadata file per event that both agencies accept. Each reads only the columns it
- * knows: Adobe Stock Title, Keywords and a numeric Category; Shutterstock Description, Keywords
- * and named Categories.
- */
+/** One file per event for both agencies: Adobe Stock reads Title, Keywords, Category; Shutterstock Description, Keywords, Categories. */
 object AgencyCsv {
 
     const val FILE_NAME = "metadata.csv"
@@ -27,8 +23,8 @@ object AgencyCsv {
                 listOf(
                     row.fileName,
                     row.title,
-                    row.description,
-                    row.keywords.joinToString(", "),
+                    row.description.orEmpty(),
+                    row.keywords.orEmpty().joinToString(", "),
                     row.category?.let(::adobeCategory)?.toString().orEmpty(),
                     row.category.orEmpty(),
                 ),
@@ -36,7 +32,7 @@ object AgencyCsv {
         }
     }.toByteArray(Charsets.UTF_8)
 
-    /** Rows by file name; a file without a Filename or Title column yields none. */
+    /** Rows by file name; a file without a Filename or Title column yields none, and a row with a blank title is not filled in yet. */
     fun read(bytes: ByteArray): Map<String, CsvRow> {
         val records = parse(bytes.toString(Charsets.UTF_8).removePrefix("﻿"))
         val header = records.firstOrNull()?.map { it.trim().lowercase() } ?: return emptyMap()
@@ -48,15 +44,15 @@ object AgencyCsv {
         val categories = column("Categories")
 
         return records.drop(1).mapNotNull { record ->
-            fun field(index: Int?) = index?.let(record::getOrNull)?.trim().orEmpty()
-            val name = field(fileName).ifEmpty { return@mapNotNull null }
+            fun field(index: Int) = record.getOrNull(index)?.trim().orEmpty()
             CsvRow(
-                fileName = name,
-                title = field(title),
-                description = field(description),
-                keywords = field(keywords).split(',').map { it.trim() }.filter { it.isNotEmpty() },
-                // Shutterstock allows two; the app keeps one.
-                category = field(categories).substringBefore(',').trim().ifEmpty { null },
+                fileName = field(fileName).ifEmpty { return@mapNotNull null },
+                title = field(title).ifEmpty { return@mapNotNull null },
+                description = description?.let(::field),
+                // The app never writes a row without keywords, so a blank cell clears nothing.
+                keywords = keywords?.let(::field)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.ifEmpty { null },
+                // Shutterstock allows two; the app keeps one. Blank is no category.
+                category = categories?.let(::field)?.substringBefore(',')?.trim(),
             )
         }.associateBy { it.fileName }
     }

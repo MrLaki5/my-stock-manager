@@ -50,10 +50,7 @@ sealed interface PullState {
     data class Failed(val id: String, val message: String) : PullState
 }
 
-/**
- * Cloud → phone, only when asked: each root folder becomes an event, the cloud wins a clash, nothing local is deleted.
- * Metadata comes from the folder's CSV; a file's embedded metadata only fills an image the CSV has no row for.
- */
+/** Cloud → phone, only when asked: each root folder is an event, the cloud and its CSV win a clash, nothing local is deleted. */
 @Singleton
 class NextcloudPull @Inject constructor(
     private val store: PullStore,
@@ -186,9 +183,9 @@ class NextcloudPull @Inject constructor(
                 album.publish(temp, entry.name, target.name)
             }
             val capturedOn = inspected.capturedOn ?: album.dateTaken(uri)
-            val csvMetadata = row?.let { metadataOf(it.title, it.description, it.keywords, it.category, capturedOn, target) }
+            val csvMetadata = row?.let { csvMetadataOf(it, match, capturedOn, target) }
             val embeddedMetadata = inspected.embedded
-                ?.takeIf { csvMetadata == null && match?.hasMetadata != true }
+                ?.takeIf { csvMetadata == null && match?.title == null }
                 ?.let { metadataOf(it.title, it.caption, it.keywords, it.category, capturedOn, target) }
             val pulled = PulledImage(
                 remoteFileName = entry.name,
@@ -223,10 +220,21 @@ class NextcloudPull @Inject constructor(
     private suspend fun keepFile(match: LocalImage, row: CsvRow?, target: Target, tally: Tally) {
         val changed = row != null && store.applyMetadata(
             match.id,
-            metadataOf(row.title, row.description, row.keywords, row.category, match.capturedOn, target),
+            csvMetadataOf(row, match, match.capturedOn, target),
             System.currentTimeMillis(),
         )
         if (changed) tally.updated++ else tally.unchanged++
+    }
+
+    /** A field the CSV does not give, such as an Adobe-only file's Description, keeps the phone's. */
+    private fun csvMetadataOf(row: CsvRow, match: LocalImage?, capturedOn: String?, target: Target): ParsedMetadata {
+        val parsed = metadataOf(row.title, row.description, row.keywords.orEmpty(), row.category, capturedOn, target)
+        return parsed.copy(
+            description = if (row.description == null) match?.description else parsed.description,
+            captionPlace = if (row.description == null) match?.captionPlace.orEmpty() else parsed.captionPlace,
+            keywords = if (row.keywords == null) match?.keywords.orEmpty() else parsed.keywords,
+            category = if (row.category == null) match?.category else parsed.category,
+        )
     }
 
     private fun metadataOf(

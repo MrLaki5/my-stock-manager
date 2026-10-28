@@ -107,7 +107,7 @@ class ImportCopier @Inject constructor(
                         byteSize = temp.length(),
                         importedAt = now,
                         capturedOn = capturedOn,
-                        state = if (metadata?.generated == true) ImageState.GENERATED else ImageState.FILED,
+                        state = ImageState.of(metadata),
                         title = metadata?.title,
                         description = metadata?.description,
                         keywords = metadata?.keywords.orEmpty(),

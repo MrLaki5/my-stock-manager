@@ -383,6 +383,49 @@ class NextcloudSyncEngineTest {
     }
 
     @Test
+    fun `deleting the last described image settles even when the CSV is already gone from the cloud`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        store.describe(10, "A", listOf("a"))
+        sync()
+        drive.files.remove(csvPath)
+        drive.bodies.remove(csvPath)
+        store.deleteImage(10)
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertNull(runBlocking { store.nextAction() })
+    }
+
+    @Test
+    fun `keeps the cloud's row for an image this phone has no metadata for`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        store.describe(11, "B", listOf("b"))
+        sync()
+        drive.putFile(csvPath, String(AgencyCsv.write(listOf(CsvRow("a.jpg", "From the other phone", "", listOf("a"), null)))))
+        store.describe(11, "B again", listOf("b"))
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals("From the other phone", cloudCsv().getValue("a.jpg").title)
+        assertEquals("B again", cloudCsv().getValue("b.jpg").title)
+    }
+
+    @Test
+    fun `the CSV waits until the event has finished generating`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        sync()
+        store.describe(10, "A", listOf("a"))
+        store.images.getValue(11).generating = true
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertNull(drive.files[csvPath])
+
+        store.images.getValue(11).generating = false
+        store.describe(11, "B", listOf("b"))
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(listOf("ROOT", "LIST Beach", "PUT $csvPath"), drive.calls)
+        assertEquals(setOf("a.jpg", "b.jpg"), cloudCsv().keys)
+    }
+
+    @Test
     fun `a full check rewrites a CSV deleted on the cloud`() {
         event(1, "Beach", 10L to "a.jpg")
         store.describe(10, "Waves", listOf("beach"))

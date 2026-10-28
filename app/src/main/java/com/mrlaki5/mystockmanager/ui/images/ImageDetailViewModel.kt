@@ -101,6 +101,9 @@ class ImageDetailViewModel @AssistedInject constructor(
 
     private val _lead = MutableStateFlow<CaptionLead?>(null)
 
+    /** The row as last read, which an edit holds back and a discard returns to. */
+    private var latest: MetadataDraft? = null
+
     /** The description exactly as the CSV will carry it, recomputed live from the same inputs. */
     val caption: StateFlow<String> = combine(_draft, _lead) { draft, lead ->
         if (draft == null) "" else EditorialCaption.build(
@@ -127,9 +130,9 @@ class ImageDetailViewModel @AssistedInject constructor(
                 .map { CaptionLead(it.captionPlace, it.capturedOn) to MetadataDraft.of(it) }
                 .distinctUntilChanged()
                 .collect { (lead, draft) ->
-                    if (_draft.value != _saved.value) return@collect
                     _lead.value = lead
-                    seed(draft)
+                    latest = draft
+                    if (_draft.value == _saved.value) seed(draft)
                 }
         }
     }
@@ -189,8 +192,9 @@ class ImageDetailViewModel @AssistedInject constructor(
         )
     }
 
+    // The row may have changed under the edit, e.g. by a pull, so this is not always what the edit started from.
     fun discard() {
-        _draft.value = _saved.value
+        latest?.let(::seed)
     }
 
     fun save() {

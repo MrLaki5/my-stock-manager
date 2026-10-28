@@ -102,6 +102,15 @@ class EditorialCaptionTest {
     }
 
     @Test
+    fun `a caption without a body round-trips to an empty body`() {
+        val caption = EditorialCaption.build("Belgrade, Serbia", "2026-05-23", "")
+
+        assertEquals("Belgrade, Serbia - May 23, 2026:", caption)
+        assertEquals(EditorialCaption.Parts("Belgrade, Serbia", ""), EditorialCaption.parse(caption, "2026-05-23", null))
+        assertEquals(EditorialCaption.Parts(null, ""), EditorialCaption.parse("May 23, 2026:", "2026-05-23", null))
+    }
+
+    @Test
     fun `parse keeps a location that itself contains the separator`() {
         val caption = EditorialCaption.build("Novi Sad - Petrovaradin", "2026-05-23", body)
         assertEquals("Novi Sad - Petrovaradin", EditorialCaption.parse(caption, "2026-05-23", null).location)

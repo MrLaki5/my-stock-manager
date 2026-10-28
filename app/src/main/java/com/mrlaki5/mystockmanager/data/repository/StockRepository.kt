@@ -217,10 +217,7 @@ class StockRepository @Inject constructor(
         }
     }
 
-    /**
-     * Takes over metadata embedded in album files from before the CSV, for images that have none of
-     * their own. Each file is read once; sync then writes what was found into the event's CSV.
-     */
+    /** Reads each album file's embedded metadata once, for images with none of their own; sync then puts it in the CSV. */
     suspend fun adoptEmbeddedMetadata() = withContext(Dispatchers.IO) {
         for (image in imageDao.getUncheckedForEmbedded()) {
             val uri = image.mediaStoreUri?.toUri() ?: continue
@@ -241,7 +238,7 @@ class StockRepository @Inject constructor(
                 captionPlace = metadata.captionPlace,
                 keywords = metadata.keywords,
                 category = metadata.category,
-                state = if (metadata.generated) ImageState.GENERATED else ImageState.FILED,
+                state = ImageState.of(metadata),
                 generatedAt = System.currentTimeMillis().takeIf { metadata.generated },
             )
         }

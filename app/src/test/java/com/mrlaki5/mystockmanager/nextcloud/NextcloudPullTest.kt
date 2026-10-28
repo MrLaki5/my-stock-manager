@@ -315,6 +315,39 @@ class NextcloudPullTest {
     }
 
     @Test
+    fun `a CSV without some columns keeps the phone's values for them`() {
+        store.addEvent(1, "Beach")
+        store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
+        syncedLocal(10, 1, "Beach/a.jpg", "same")
+        store.describe(10, "Phone title", listOf("phone"), description = "Phone body.", category = "Nature")
+        drive.putFile("Beach/a.jpg", "same")
+        drive.putFile("Beach/${AgencyCsv.FILE_NAME}", "Filename,Title,Keywords,Category\na.jpg,Adobe title,,11\nb.jpg,,x,11\n")
+
+        assertEquals(PullSummary(updated = 1), summary(run()))
+        val image = store.images.getValue(10)
+        assertEquals("Adobe title", image.title)
+        assertEquals("Phone body.", image.description)
+        assertEquals(listOf("phone"), image.keywords)
+        assertEquals("Nature", image.category)
+    }
+
+    @Test
+    fun `an image without a description makes the round trip unchanged`() {
+        store.addEvent(1, "Beach")
+        store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
+        syncedLocal(10, 1, "Beach/a.jpg", "same")
+        store.images.getValue(10).capturedOn = "2026-05-23"
+        store.describe(10, "Waves", listOf("beach"), description = "")
+        val engine = NextcloudSyncEngine(store, flags, { drive }, FakeFiles())
+        drive.putFile("Beach/a.jpg", "same")
+        runBlocking { engine.run() }
+
+        assertEquals("May 23, 2026:", AgencyCsv.read(drive.bodies.getValue("Beach/${AgencyCsv.FILE_NAME}")).getValue("a.jpg").description)
+        assertEquals(PullSummary(unchanged = 1), summary(run()))
+        assertEquals("", store.images.getValue(10).description.orEmpty())
+    }
+
+    @Test
     fun `the CSV is never imported as an image`() {
         drive.putFile("Beach/a.jpg", "A")
         putCsv("Beach", row("a.jpg"))

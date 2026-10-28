@@ -16,10 +16,7 @@ data class EmbeddedMetadata(
     val category: String?,
 )
 
-/**
- * Uses [JpegImageParser] directly rather than the `Imaging` facade or `JpegImageMetadata`,
- * both of which expose `java.awt` types in their signatures.
- */
+/** Uses [JpegImageParser] directly: the `Imaging` facade and `JpegImageMetadata` expose `java.awt` types. */
 object EmbeddedMetadataReader {
 
     /** Null when the file carries no title, caption or keywords, or cannot be parsed. */

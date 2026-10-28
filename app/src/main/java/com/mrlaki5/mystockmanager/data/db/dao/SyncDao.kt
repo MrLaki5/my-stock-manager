@@ -201,7 +201,8 @@ abstract class SyncDao : SyncStore {
     @Transaction
     override suspend fun commitCsv(folderId: Long, version: Long, images: List<CsvImage>, written: Boolean) {
         images.forEach { setCsvVersion(it.imageId, it.metadataVersion) }
-        if (written) setCsvSyncedVersion(folderId, version)
+        // Not written means no CSV is on the cloud, so a deletion has nothing left to rewrite.
+        setCsvSyncedVersion(folderId, version.takeIf { written })
     }
 
     @Transaction
@@ -387,11 +388,13 @@ abstract class SyncDao : SyncStore {
                 "AND (s.failedVersion IS NULL OR s.failedVersion != i.fileVersion)"
 
         // A deletion only matters to a CSV already on the cloud; an image the CSV has not seen always does.
+        // Held while the event is generating, so a batch rewrites the CSV once rather than per image.
         const val CSV_STALE =
             "((sf.csvSyncedVersion IS NOT NULL AND sf.csvSyncedVersion != sf.csvVersion) " +
                 "OR EXISTS (SELECT 1 FROM images ci JOIN sync_images cs ON cs.imageId = ci.id " +
                 "WHERE ci.folderId = sf.folderId AND cs.remoteSize IS NOT NULL " +
-                "AND (cs.csvVersion IS NULL OR cs.csvVersion != ci.metadataVersion)))"
+                "AND (cs.csvVersion IS NULL OR cs.csvVersion != ci.metadataVersion))) " +
+                "AND NOT EXISTS (SELECT 1 FROM images gi WHERE gi.folderId = sf.folderId AND gi.state = 'GENERATING')"
 
         const val COUNTS =
             "SELECT " +

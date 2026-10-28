@@ -33,7 +33,20 @@ class AgencyCsvTest {
         val text = String(AgencyCsv.write(listOf(row.copy(category = null))))
 
         assertTrue(text.endsWith(",,\r\n"))
-        assertNull(AgencyCsv.read(text.toByteArray()).getValue(row.fileName).category)
+        assertEquals("", AgencyCsv.read(text.toByteArray()).getValue(row.fileName).category)
+    }
+
+    @Test
+    fun `a column the CSV lacks reads as not given, and a row without a title is not filled in yet`() {
+        val text = "Filename,Title,Keywords,Category\n" +
+            "a.jpg,Waves,,11\n" +
+            "b.jpg,,beach,11\n"
+
+        val read = AgencyCsv.read(text.toByteArray())
+        assertEquals(setOf("a.jpg"), read.keys)
+        assertNull(read.getValue("a.jpg").description)
+        assertNull(read.getValue("a.jpg").keywords)
+        assertNull(read.getValue("a.jpg").category)
     }
 
     @Test

@@ -10,6 +10,15 @@ import kotlinx.coroutines.flow.Flow
 
 data class AlbumRow(val id: Long, val mediaStoreUri: String, val albumState: AlbumState, val trashExpiresAt: Long?)
 
+/** Fills an image that has no metadata from its file's; never overrides metadata the row already has. */
+internal const val ADOPT_EMBEDDED = """
+    UPDATE images
+    SET title = :title, description = :description, captionPlace = :captionPlace,
+        keywords = :keywords, category = :category, state = :state, generatedAt = :generatedAt,
+        generationError = NULL, metadataVersion = metadataVersion + 1, embeddedChecked = 1
+    WHERE id = :id AND title IS NULL AND state != 'GENERATING'
+"""
+
 @Dao
 interface ImageDao {
 
@@ -125,7 +134,11 @@ interface ImageDao {
     @Query("SELECT * FROM images WHERE capturedOn IS NULL AND mediaStoreUri IS NOT NULL")
     suspend fun getWithoutCaptureDate(): List<ImageEntity>
 
-    @Query("UPDATE images SET capturedOn = :capturedOn WHERE id = :id")
+    // The date leads the CSV caption, so a new one is a metadata change.
+    @Query(
+        "UPDATE images SET capturedOn = :capturedOn, metadataVersion = metadataVersion + 1 " +
+            "WHERE id = :id AND capturedOn IS NOT :capturedOn"
+    )
     suspend fun setCapturedOn(id: Long, capturedOn: String?)
 
     @Query(
@@ -137,16 +150,7 @@ interface ImageDao {
     @Query("UPDATE images SET embeddedChecked = 1 WHERE id = :id")
     suspend fun markEmbeddedChecked(id: Long)
 
-    /** Fills an image that has no metadata from its file's; never overrides metadata the row already has. */
-    @Query(
-        """
-        UPDATE images
-        SET title = :title, description = :description, captionPlace = :captionPlace,
-            keywords = :keywords, category = :category, state = :state, generatedAt = :generatedAt,
-            generationError = NULL, metadataVersion = metadataVersion + 1, embeddedChecked = 1
-        WHERE id = :id AND title IS NULL AND state != 'GENERATING'
-        """
-    )
+    @Query(ADOPT_EMBEDDED)
     suspend fun adoptEmbedded(
         id: Long,
         title: String?,

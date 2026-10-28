@@ -12,16 +12,17 @@ data class LocalImage(
     val mediaStoreUri: String?,
     val fileVersion: Long,
     val capturedOn: String?,
-    val hasMetadata: Boolean,
+    val title: String?,
+    val description: String?,
+    val captionPlace: String?,
+    val keywords: List<String>,
+    val category: String?,
     val remoteFileName: String?,
     val syncedVersion: Long?,
     val remoteSize: Long?,
 )
 
-/**
- * A downloaded file. [csvMetadata] is the event CSV's row for it; without one, [embeddedMetadata] from
- * the file fills an image that has no metadata yet, and the phone's own metadata is otherwise kept.
- */
+/** A downloaded file; without a CSV row, [embeddedMetadata] only fills an image that has no metadata yet. */
 data class PulledImage(
     val remoteFileName: String,
     val mediaStoreUri: String,

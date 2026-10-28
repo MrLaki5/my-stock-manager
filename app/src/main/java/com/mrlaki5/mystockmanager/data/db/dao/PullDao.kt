@@ -32,8 +32,9 @@ abstract class PullDao : PullStore {
     @Query(
         """
         SELECT i.id AS id, i.displayName AS displayName, i.mediaStoreUri AS mediaStoreUri,
-            i.fileVersion AS fileVersion, i.capturedOn AS capturedOn, i.title IS NOT NULL AS hasMetadata,
-            s.remoteFileName AS remoteFileName,
+            i.fileVersion AS fileVersion, i.capturedOn AS capturedOn, i.title AS title,
+            i.description AS description, i.captionPlace AS captionPlace, i.keywords AS keywords,
+            i.category AS category, s.remoteFileName AS remoteFileName,
             s.syncedVersion AS syncedVersion, s.remoteSize AS remoteSize
         FROM images i LEFT JOIN sync_images s ON s.imageId = i.id
         WHERE i.folderId = :folderId
@@ -70,7 +71,7 @@ abstract class PullDao : PullStore {
                 byteSize = image.byteSize,
                 importedAt = now,
                 capturedOn = image.capturedOn,
-                state = if (metadata?.generated == true) ImageState.GENERATED else ImageState.FILED,
+                state = ImageState.of(metadata),
                 title = metadata?.title,
                 description = metadata?.description,
                 captionPlace = metadata?.captionPlace,
@@ -119,7 +120,7 @@ abstract class PullDao : PullStore {
             captionPlace = metadata.captionPlace,
             keywords = metadata.keywords,
             category = metadata.category,
-            state = if (metadata.generated) ImageState.GENERATED else ImageState.FILED,
+            state = ImageState.of(metadata),
             generatedAt = now.takeIf { metadata.generated },
         ) > 0
         markInCsv(imageId)
@@ -133,7 +134,7 @@ abstract class PullDao : PullStore {
         captionPlace = metadata.captionPlace,
         keywords = metadata.keywords,
         category = metadata.category,
-        state = if (metadata.generated) ImageState.GENERATED else ImageState.FILED,
+        state = ImageState.of(metadata),
         generatedAt = now.takeIf { metadata.generated },
     )
 
@@ -172,6 +173,7 @@ abstract class PullDao : PullStore {
         UPDATE images
         SET sha256 = :sha256, widthPx = :widthPx, heightPx = :heightPx, byteSize = :byteSize,
             capturedOn = :capturedOn, mediaStoreUri = :mediaStoreUri, fileVersion = fileVersion + 1,
+            metadataVersion = metadataVersion + (capturedOn IS NOT :capturedOn),
             albumState = 'PRESENT', trashExpiresAt = NULL, embeddedChecked = 1
         WHERE id = :id
         """
@@ -186,15 +188,16 @@ abstract class PullDao : PullStore {
         mediaStoreUri: String,
     )
 
-    // Leaves an identical row alone, so pulling again is not reported as an update.
+    // Leaves an identical row alone, NULL and '' alike, so pulling again is not reported as an update.
     @Query(
         """
         UPDATE images
         SET title = :title, description = :description, captionPlace = :captionPlace,
             keywords = :keywords, category = :category, state = :state, generatedAt = :generatedAt,
             generationError = NULL, metadataVersion = metadataVersion + 1
-        WHERE id = :id AND state != 'GENERATING' AND NOT (title IS :title AND description IS :description
-            AND captionPlace IS :captionPlace AND keywords IS :keywords AND category IS :category)
+        WHERE id = :id AND state != 'GENERATING' AND NOT (IFNULL(title, '') = IFNULL(:title, '')
+            AND IFNULL(description, '') = IFNULL(:description, '') AND IFNULL(captionPlace, '') = :captionPlace
+            AND keywords IS :keywords AND IFNULL(category, '') = IFNULL(:category, ''))
         """
     )
     protected abstract suspend fun updateMetadataIfDifferent(
@@ -208,15 +211,7 @@ abstract class PullDao : PullStore {
         generatedAt: Long?,
     ): Int
 
-    @Query(
-        """
-        UPDATE images
-        SET title = :title, description = :description, captionPlace = :captionPlace,
-            keywords = :keywords, category = :category, state = :state, generatedAt = :generatedAt,
-            generationError = NULL, metadataVersion = metadataVersion + 1
-        WHERE id = :id AND title IS NULL AND state != 'GENERATING'
-        """
-    )
+    @Query(ADOPT_EMBEDDED)
     protected abstract suspend fun adoptEmbeddedInto(
         id: Long,
         title: String?,
