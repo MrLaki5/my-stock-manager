@@ -23,7 +23,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.SyncImageEntity
         SyncImageEntity::class,
         RemoteDeletionEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -112,6 +112,17 @@ abstract class StockDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE images ADD COLUMN albumState TEXT NOT NULL DEFAULT 'PRESENT'")
                 db.execSQL("ALTER TABLE images ADD COLUMN trashExpiresAt INTEGER")
+            }
+        }
+
+        /** Metadata moves from the JPEG into a CSV per event; every folder's CSV is owed, and files are read once for what they embed. */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE images ADD COLUMN metadataVersion INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE images ADD COLUMN embeddedChecked INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE sync_images ADD COLUMN csvVersion INTEGER")
+                db.execSQL("ALTER TABLE sync_folders ADD COLUMN csvVersion INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE sync_folders ADD COLUMN csvSyncedVersion INTEGER")
             }
         }
     }

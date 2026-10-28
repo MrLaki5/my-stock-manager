@@ -1,7 +1,10 @@
 package com.mrlaki5.mystockmanager.nextcloud
 
+import com.mrlaki5.mystockmanager.metadata.AgencyCsv
+import com.mrlaki5.mystockmanager.metadata.CsvRow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
 import java.io.InputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,6 +23,8 @@ fun interface RemoteDriveFactory {
 interface LocalFiles {
     fun sizeOf(uri: String): Long?
     fun open(uri: String): InputStream
+
+    fun newTempFile(): File
 }
 
 /** Commits each step before picking the next, so a run stopped anywhere resumes without redoing work. */
@@ -69,6 +74,7 @@ class NextcloudSyncEngine @Inject constructor(
             is SyncAction.CreateFolder -> createFolder(action)
             is SyncAction.MoveFolder -> moveFolder(action)
             is SyncAction.Upload -> upload(action)
+            is SyncAction.WriteCsv -> writeCsv(action)
         }
 
         private suspend fun delete(action: SyncAction.DeleteRemote): SyncOutcome? =
@@ -166,6 +172,54 @@ class NextcloudSyncEngine @Inject constructor(
             }
         }
 
+        private suspend fun writeCsv(action: SyncAction.WriteCsv): SyncOutcome? {
+            val rows = action.images.mapNotNull { it.row }
+            if (rows.isEmpty() && !action.onCloud) {
+                return done { store.commitCsv(action.folderId, action.version, action.images, written = false) }
+            }
+            val entries = when (val listing = drive.list(listOf(action.folder))) {
+                is DavResult.Ok -> listing.value ?: return done { store.forgetFolder(action.folderId) }
+                is DavResult.ParentMissing -> return done { store.forgetFolder(action.folderId) }
+                is DavResult.Failure -> return listing.toOutcome()
+            }
+            val kept = when (val result = cloudOnlyRows(action, entries)) {
+                is DavResult.Ok -> result.value
+                is DavResult.Failure -> return result.toOutcome()
+            }
+            val merged = rows + kept
+            if (merged.isEmpty() && entries.none { it.name == AgencyCsv.FILE_NAME }) {
+                return done { store.commitCsv(action.folderId, action.version, action.images, written = false) }
+            }
+
+            val bytes = AgencyCsv.write(merged)
+            val path = listOf(action.folder, AgencyCsv.FILE_NAME)
+            return when (val result = drive.put(path, bytes.size.toLong(), createOnly = false) { bytes.inputStream() }) {
+                is DavResult.Ok -> done { store.commitCsv(action.folderId, action.version, action.images, written = true) }
+                is DavResult.ParentMissing -> done { store.forgetFolder(action.folderId) }
+                is DavResult.Failure -> result.toOutcome("Could not upload the metadata for \"${action.folder}\"")
+            }
+        }
+
+        /** Cloud rows for files the phone has no row of its own for: deleted with sync off, or with metadata from another device. */
+        private suspend fun cloudOnlyRows(action: SyncAction.WriteCsv, entries: List<DavEntry>): DavResult<List<CsvRow>> {
+            if (entries.none { it.name == AgencyCsv.FILE_NAME && !it.isCollection }) return DavResult.Ok(emptyList())
+            val temp = files.newTempFile()
+            try {
+                when (val result = drive.download(listOf(action.folder, AgencyCsv.FILE_NAME), temp)) {
+                    is DavResult.Ok -> if (!result.value) return DavResult.Ok(emptyList())
+                    is DavResult.Failure -> return result
+                }
+                val onCloud = entries.filterNot { it.isCollection }.map { it.name }.toSet()
+                val local = action.images.filter { it.row != null }.map { it.fileName }.toSet()
+                val kept = AgencyCsv.read(temp.readBytes()).values
+                    .filter { it.fileName in onCloud && it.fileName !in local }
+                    .sortedBy { it.fileName }
+                return DavResult.Ok(kept)
+            } finally {
+                temp.delete()
+            }
+        }
+
         private suspend fun fullCheck(): SyncOutcome? {
             store.clearFailures()
             for (folder in store.syncedFolders()) {
@@ -177,6 +231,7 @@ class NextcloudSyncEngine @Inject constructor(
                             continue
                         }
                         val sizes = entries.filterNot { it.isCollection }.associate { it.name to it.size }
+                        if (folder.csvOnCloud && AgencyCsv.FILE_NAME !in sizes) store.forgetCsv(folder.folderId)
                         val stale = folder.images
                             .filter { it.remoteSize != null && sizes[it.remoteFileName] != it.remoteSize }
                             .map { it.imageId }

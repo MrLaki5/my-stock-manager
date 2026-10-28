@@ -70,7 +70,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
-import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
+import com.mrlaki5.mystockmanager.metadata.model.TITLE_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
@@ -161,8 +161,7 @@ private fun ImageDetailPage(
             title = { Text("Discard changes?") },
             text = {
                 Text(
-                    "These edits have not been written into the image yet. Leaving now " +
-                        "loses them."
+                    "These edits have not been saved yet. Leaving now loses them."
                 )
             },
             confirmButton = {
@@ -373,7 +372,7 @@ private fun MetadataEditor(
                     if (draft.title.isBlank()) {
                         "A title is required"
                     } else {
-                        "${draft.title.length} of $IPTC_OBJECT_NAME_MAX characters"
+                        "${draft.title.length} of $TITLE_MAX characters"
                     }
                 )
             },
@@ -453,7 +452,7 @@ private fun CaptionPreview(caption: String, hasDate: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Caption written to the file",
+                "Caption in the CSV",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),

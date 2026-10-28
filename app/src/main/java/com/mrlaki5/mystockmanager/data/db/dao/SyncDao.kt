@@ -9,6 +9,9 @@ import androidx.room.Upsert
 import com.mrlaki5.mystockmanager.data.db.entity.RemoteDeletionEntity
 import com.mrlaki5.mystockmanager.data.db.entity.SyncFolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.SyncImageEntity
+import com.mrlaki5.mystockmanager.metadata.CsvRow
+import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
+import com.mrlaki5.mystockmanager.nextcloud.CsvImage
 import com.mrlaki5.mystockmanager.nextcloud.ImageCloudRow
 import com.mrlaki5.mystockmanager.nextcloud.RemoteNames
 import com.mrlaki5.mystockmanager.nextcloud.SyncAction
@@ -32,6 +35,29 @@ data class ImageToSync(
     val remoteSize: Long?,
 )
 
+data class CsvFolderRow(val folderId: Long, val remoteName: String, val csvVersion: Long, val csvSyncedVersion: Long?)
+
+data class CsvImageRow(
+    val imageId: Long,
+    val remoteFileName: String,
+    val metadataVersion: Long,
+    val title: String?,
+    val description: String?,
+    val keywords: List<String>,
+    val category: String?,
+    val captionPlace: String?,
+    val capturedOn: String?,
+) {
+    fun toCsvImage() = CsvImage(
+        imageId = imageId,
+        fileName = remoteFileName,
+        metadataVersion = metadataVersion,
+        row = title?.takeIf { keywords.isNotEmpty() }?.let {
+            CsvRow(remoteFileName, it, EditorialCaption.build(captionPlace, capturedOn, description.orEmpty()), keywords, category)
+        },
+    )
+}
+
 data class SyncedImageRow(val imageId: Long, val folderId: Long, val remoteFileName: String, val remoteSize: Long?)
 
 @Dao
@@ -49,7 +75,11 @@ abstract class SyncDao : SyncStore {
     /** Tombstoning inside the delete's transaction means no upload can slip in between the two. */
     @Transaction
     open suspend fun deleteImage(imageId: Long, tombstone: Boolean) {
-        if (tombstone) remotePathOf(imageId)?.let { insertDeletion(RemoteDeletionEntity(it, now())) }
+        if (tombstone) {
+            remotePathOf(imageId)?.let { insertDeletion(RemoteDeletionEntity(it, now())) }
+            // Without a tombstone the file stays on the cloud, and so does its CSV row.
+            bumpCsvOf(imageId)
+        }
         deleteImageRow(imageId)
     }
 
@@ -85,7 +115,15 @@ abstract class SyncDao : SyncStore {
             }
         }
 
-        val image = firstDirtyImage() ?: return null
+        val image = firstDirtyImage() ?: return firstStaleCsv()?.let { folder ->
+            SyncAction.WriteCsv(
+                folderId = folder.folderId,
+                folder = folder.remoteName,
+                version = folder.csvVersion,
+                onCloud = folder.csvSyncedVersion != null,
+                images = csvImagesOf(folder.folderId).map { it.toCsvImage() },
+            )
+        }
         val fileName = image.remoteFileName
             ?: RemoteNames.fileName(image.displayName, image.id, fileNamesIn(image.folderId))
                 .also { insertSyncImage(SyncImageEntity(imageId = image.id, remoteFileName = it)) }
@@ -109,7 +147,9 @@ abstract class SyncDao : SyncStore {
         // Deletions queued under the old name while the move was in flight now live under the new one.
         if (movedFrom != null) retargetDeletions(movedFrom, remoteName)
         if (folderExists(folderId)) {
-            upsertSyncFolder(SyncFolderEntity(folderId, remoteName, localName))
+            // A move keeps the CSV that moved with the folder.
+            val folder = syncFolderOf(folderId)?.copy(remoteName = remoteName, localName = localName)
+            upsertSyncFolder(folder ?: SyncFolderEntity(folderId, remoteName, localName))
         } else {
             insertDeletion(RemoteDeletionEntity(remoteName, now()))
         }
@@ -145,6 +185,7 @@ abstract class SyncDao : SyncStore {
                 remoteName = folder.remoteName,
                 images = images[folder.folderId].orEmpty()
                     .map { SyncedImage(it.imageId, it.remoteFileName, it.remoteSize) },
+                csvOnCloud = folder.csvSyncedVersion != null,
             )
         }
     }
@@ -156,6 +197,19 @@ abstract class SyncDao : SyncStore {
 
     @Query("UPDATE sync_images SET failedVersion = NULL, error = NULL")
     abstract override suspend fun clearFailures()
+
+    @Transaction
+    override suspend fun commitCsv(folderId: Long, version: Long, images: List<CsvImage>, written: Boolean) {
+        images.forEach { setCsvVersion(it.imageId, it.metadataVersion) }
+        // Not written means no CSV is on the cloud, so a deletion has nothing left to rewrite.
+        setCsvSyncedVersion(folderId, version.takeIf { written })
+    }
+
+    @Transaction
+    override suspend fun forgetCsv(folderId: Long) {
+        setCsvSyncedVersion(folderId, null)
+        clearCsvVersionsOf(folderId)
+    }
 
     @Query("SELECT path FROM remote_deletions ORDER BY createdAt, path LIMIT 1")
     protected abstract suspend fun firstDeletion(): String?
@@ -200,6 +254,46 @@ abstract class SyncDao : SyncStore {
     )
     protected abstract suspend fun fileNamesIn(folderId: Long): List<String>
 
+    @Query(
+        """
+        SELECT sf.folderId AS folderId, sf.remoteName AS remoteName, sf.csvVersion AS csvVersion,
+            sf.csvSyncedVersion AS csvSyncedVersion
+        FROM sync_folders sf JOIN folders f ON f.id = sf.folderId AND sf.localName = f.name
+        WHERE $CSV_STALE
+        ORDER BY sf.folderId
+        LIMIT 1
+        """
+    )
+    protected abstract suspend fun firstStaleCsv(): CsvFolderRow?
+
+    // Only images already on the cloud, so the CSV never names a file that is not there.
+    @Query(
+        """
+        SELECT i.id AS imageId, s.remoteFileName AS remoteFileName, i.metadataVersion AS metadataVersion,
+            i.title AS title, i.description AS description, i.keywords AS keywords, i.category AS category,
+            i.captionPlace AS captionPlace, i.capturedOn AS capturedOn
+        FROM images i JOIN sync_images s ON s.imageId = i.id
+        WHERE i.folderId = :folderId AND s.remoteSize IS NOT NULL
+        ORDER BY i.id
+        """
+    )
+    protected abstract suspend fun csvImagesOf(folderId: Long): List<CsvImageRow>
+
+    @Query("UPDATE sync_images SET csvVersion = :version WHERE imageId = :imageId")
+    protected abstract suspend fun setCsvVersion(imageId: Long, version: Long)
+
+    @Query("UPDATE sync_folders SET csvSyncedVersion = :version WHERE folderId = :folderId")
+    protected abstract suspend fun setCsvSyncedVersion(folderId: Long, version: Long?)
+
+    @Query("UPDATE sync_images SET csvVersion = NULL WHERE imageId IN (SELECT id FROM images WHERE folderId = :folderId)")
+    protected abstract suspend fun clearCsvVersionsOf(folderId: Long)
+
+    @Query(
+        "UPDATE sync_folders SET csvVersion = csvVersion + 1 " +
+            "WHERE folderId = (SELECT folderId FROM images WHERE id = :imageId)"
+    )
+    protected abstract suspend fun bumpCsvOf(imageId: Long)
+
     @Insert
     protected abstract suspend fun insertSyncImage(entity: SyncImageEntity)
 
@@ -240,6 +334,9 @@ abstract class SyncDao : SyncStore {
 
     @Query("SELECT * FROM sync_folders")
     protected abstract suspend fun allSyncFolders(): List<SyncFolderEntity>
+
+    @Query("SELECT * FROM sync_folders WHERE folderId = :folderId")
+    protected abstract suspend fun syncFolderOf(folderId: Long): SyncFolderEntity?
 
     @Query(
         """
@@ -290,13 +387,24 @@ abstract class SyncDao : SyncStore {
             "(s.imageId IS NULL OR s.syncedVersion IS NULL OR s.syncedVersion != i.fileVersion) " +
                 "AND (s.failedVersion IS NULL OR s.failedVersion != i.fileVersion)"
 
+        // A deletion only matters to a CSV already on the cloud; an image the CSV has not seen always does.
+        // Held while the event is generating, so a batch rewrites the CSV once rather than per image.
+        const val CSV_STALE =
+            "((sf.csvSyncedVersion IS NOT NULL AND sf.csvSyncedVersion != sf.csvVersion) " +
+                "OR EXISTS (SELECT 1 FROM images ci JOIN sync_images cs ON cs.imageId = ci.id " +
+                "WHERE ci.folderId = sf.folderId AND cs.remoteSize IS NOT NULL " +
+                "AND (cs.csvVersion IS NULL OR cs.csvVersion != ci.metadataVersion))) " +
+                "AND NOT EXISTS (SELECT 1 FROM images gi WHERE gi.folderId = sf.folderId AND gi.state = 'GENERATING')"
+
         const val COUNTS =
             "SELECT " +
                 "(SELECT COUNT(*) FROM remote_deletions) " +
                 "+ (SELECT COUNT(*) FROM folders f LEFT JOIN sync_folders sf ON sf.folderId = f.id " +
                 "WHERE sf.folderId IS NULL OR sf.localName != f.name) " +
                 "+ (SELECT COUNT(*) FROM images i LEFT JOIN sync_images s ON s.imageId = i.id " +
-                "WHERE i.folderId IS NOT NULL AND i.mediaStoreUri IS NOT NULL AND i.albumState = 'PRESENT' AND $DIRTY) AS pending, " +
+                "WHERE i.folderId IS NOT NULL AND i.mediaStoreUri IS NOT NULL AND i.albumState = 'PRESENT' AND $DIRTY) " +
+                "+ (SELECT COUNT(*) FROM sync_folders sf JOIN folders f ON f.id = sf.folderId AND sf.localName = f.name " +
+                "WHERE $CSV_STALE) AS pending, " +
                 "(SELECT COUNT(*) FROM images i JOIN sync_images s ON s.imageId = i.id " +
                 "WHERE s.failedVersion = i.fileVersion) AS failed"
     }

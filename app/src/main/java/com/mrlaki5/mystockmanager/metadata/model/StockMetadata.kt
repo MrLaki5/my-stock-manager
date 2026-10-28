@@ -8,17 +8,10 @@ package com.mrlaki5.mystockmanager.metadata.model
 const val MAX_KEYWORDS = 49
 const val MIN_KEYWORDS = 7
 
-/**
- * IPTC IIM field limits. Exceeding these produces a technically non-conformant record, so
- * values are truncated to fit.
- *
- * The editorial caption lives in the description, whose 2000 octets a caption never comes
- * close to — a location, a date and two sentences run to a few hundred. It is the title
- * that is tightly capped, which is why the prompt asks for a short one.
- */
-const val IPTC_OBJECT_NAME_MAX = 64
-const val IPTC_CAPTION_MAX = 2000
-const val IPTC_KEYWORD_MAX = 64
+/** Field limits; the title stays under Adobe Stock's 70 characters, which is why the prompt asks for a short one. */
+const val TITLE_MAX = 64
+const val DESCRIPTION_MAX = 2000
+const val KEYWORD_MAX = 64
 
 /** Keyword order is meaningful: both agencies weight leading keywords more heavily. */
 data class StockMetadata(
@@ -40,9 +33,9 @@ data class StockMetadata(
             seen.putIfAbsent(kw.lowercase(), kw)
         }
         return copy(
-            title = title.trim().take(IPTC_OBJECT_NAME_MAX),
-            description = description.trim().take(IPTC_CAPTION_MAX),
-            keywords = seen.values.map { it.take(IPTC_KEYWORD_MAX) }.take(MAX_KEYWORDS),
+            title = title.trim().take(TITLE_MAX),
+            description = description.trim().take(DESCRIPTION_MAX),
+            keywords = seen.values.map { it.take(KEYWORD_MAX) }.take(MAX_KEYWORDS),
         )
     }
 

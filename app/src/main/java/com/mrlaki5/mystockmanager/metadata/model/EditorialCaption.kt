@@ -35,7 +35,7 @@ object EditorialCaption {
         ).joinToString(SEPARATOR)
 
         val text = body.trim()
-        return if (lead.isEmpty()) text else "$lead: $text"
+        return if (lead.isEmpty()) text else "$lead: $text".trimEnd()
     }
 
     data class Parts(val location: String?, val body: String)
@@ -44,26 +44,21 @@ object EditorialCaption {
     fun parse(caption: String, capturedOn: String?, knownLocation: String?): Parts {
         val text = caption.trim()
         capturedOn?.let(::formatDate)?.let { date ->
-            if (text.startsWith("$date: ")) return Parts(null, text.removePrefix("$date: ").trim())
-            val marker = "$SEPARATOR$date: "
-            val at = text.indexOf(marker)
-            if (at > 0) return Parts(text.substring(0, at).trim(), text.substring(at + marker.length).trim())
+            bodyAfter(text, date)?.let { return Parts(null, it) }
+            val at = text.indexOf("$SEPARATOR$date:")
+            if (at > 0) bodyAfter(text.substring(at + SEPARATOR.length), date)?.let { return Parts(text.substring(0, at).trim(), it) }
         }
         // Without a date the lead is only recognisable when the event's location is already known.
         val location = knownLocation?.trim()?.takeIf { it.isNotEmpty() }
-        if (location != null && text.startsWith("$location: ")) {
-            return Parts(location, text.removePrefix("$location: ").trim())
-        }
+        if (location != null) bodyAfter(text, location)?.let { return Parts(location, it) }
         return Parts(null, text)
     }
 
-    /** The place in a caption's lead, found exactly by cutting off the [body] the row already stores; null when there is none. */
-    fun placeOf(caption: String, body: String, capturedOn: String?): String? {
-        val text = caption.trim()
-        val lead = text.removeSuffix(": ${body.trim()}").takeIf { it != text }?.trim() ?: return null
-        val date = capturedOn?.let(::formatDate)
-        val place = if (date != null && lead == date) "" else if (date != null) lead.removeSuffix("$SEPARATOR$date") else lead
-        return place.trim().ifEmpty { null }
+    // A caption with an empty body is the bare "lead:", since the CSV trims what follows it.
+    private fun bodyAfter(text: String, lead: String): String? = when {
+        text == "$lead:" -> ""
+        text.startsWith("$lead: ") -> text.removePrefix("$lead: ").trim()
+        else -> null
     }
 
     /** [capturedOn] is an ISO local date; anything unparseable is treated as absent. */

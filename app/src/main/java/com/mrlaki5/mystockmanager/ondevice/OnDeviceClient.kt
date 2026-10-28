@@ -9,7 +9,7 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.mrlaki5.mystockmanager.generation.GenerationResult
-import com.mrlaki5.mystockmanager.metadata.model.IPTC_OBJECT_NAME_MAX
+import com.mrlaki5.mystockmanager.metadata.model.TITLE_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -75,7 +75,7 @@ class OnDeviceClient @Inject constructor(
             ).toString()
             val description = OnDeviceText.sentence(described)
             if (description.isEmpty()) return GenerationResult.Terminal("The on-device model returned no description.")
-            val title = OnDeviceText.title(conversation.sendMessage(OnDeviceText.TITLE_PROMPT).toString(), description, IPTC_OBJECT_NAME_MAX)
+            val title = OnDeviceText.title(conversation.sendMessage(OnDeviceText.TITLE_PROMPT).toString(), description, TITLE_MAX)
 
             val keywords = mutableListOf<String>()
             for (question in OnDeviceText.KEYWORD_QUESTIONS) {

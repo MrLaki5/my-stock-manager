@@ -4,12 +4,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.ImageEncoder
 import com.mrlaki5.mystockmanager.storage.MediaStoreExporter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,7 +17,7 @@ import java.io.File
 
 /**
  * The Phase 0 check that only a real device can answer: whether Commons Imaging's
- * IPTC/XMP path actually runs on ART.
+ * IPTC/XMP read path actually runs on ART.
  *
  * The library declares fields and methods typed against `java.awt`, which does not
  * exist on Android. ART soft-verifies such classes and only throws at the instruction
@@ -30,28 +30,19 @@ class OnDeviceMetadataTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val store = AppFileStore(context)
-    private val writer = CommonsImagingMetadataWriter()
-
     @Test
-    fun embedsAndReadsBackOnArt() {
-        val source = sourceJpeg("art-source.jpg")
+    fun readsEmbeddedMetadataOnArt() {
         val destination = store.newTempFile("art-out")
         val metadata = sampleMetadata(40)
 
-        writer.embed(source, destination, metadata)
+        EmbeddedFixture.embed(sourceJpeg("art-source.jpg"), destination, metadata)
 
-        assertTrue("no output written", destination.length() > 0)
-        val read = MetadataReader.read(destination)
-
-        assertEquals(metadata.keywords, read.iptcKeywords)
-        assertEquals(metadata.keywords, read.xmpSubjects)
-        assertEquals(metadata.title, read.iptcTitle)
-        assertNotNull("no XMP packet", read.rawXmp)
-        assertTrue("verification failed: ${read.matches(metadata)}", read.matches(metadata).isEmpty())
+        assertEquals(metadata, EmbeddedMetadataReader.read(destination))
+        assertNull(EmbeddedMetadataReader.read(sourceJpeg("art-plain.jpg")))
     }
 
     /**
-     * Isolates the single riskiest line: `MetadataReader` instantiates
+     * Isolates the single riskiest line: `EmbeddedMetadataReader` instantiates
      * `JpegImagingParameters`, whose superclass declares a `BufferedImageFactory` field.
      * If ART is going to fail, it fails here.
      */
@@ -74,9 +65,7 @@ class OnDeviceMetadataTest {
 
     @Test
     fun publishesEachEventAsItsOwnPickerAlbum() {
-        val source = sourceJpeg("mediastore-source.jpg")
-        val destination = store.newTempFile("mediastore-out")
-        writer.embed(source, destination, sampleMetadata(10))
+        val destination = sourceJpeg("mediastore-source.jpg")
 
         val exporter = MediaStoreExporter(context)
         val stamp = System.currentTimeMillis()
@@ -105,9 +94,7 @@ class OnDeviceMetadataTest {
 
     @Test
     fun deletesEveryImageInAnEventAlbum() {
-        val source = sourceJpeg("delete-source.jpg")
-        val destination = store.newTempFile("delete-out")
-        writer.embed(source, destination, sampleMetadata(8))
+        val destination = sourceJpeg("delete-source.jpg")
 
         val exporter = MediaStoreExporter(context)
         val event = "Test Disposable ${System.currentTimeMillis()}"
@@ -126,12 +113,12 @@ class OnDeviceMetadataTest {
             null, null, null,
         )?.use { if (it.moveToFirst()) it.getString(0) else null }
 
-    private fun sampleMetadata(keywordCount: Int) = StockMetadata(
+    private fun sampleMetadata(keywordCount: Int) = EmbeddedMetadata(
         title = "Golden hour over the harbour",
-        description = "Warm evening light across moored fishing boats in a calm harbour.",
+        caption = "Warm evening light across moored fishing boats in a calm harbour.",
         keywords = List(keywordCount) { "keyword$it" },
         category = "Nature",
-    ).normalized()
+    )
 
     private fun sourceJpeg(name: String, width: Int = 640, height: Int = 480): File {
         val file = store.newTempFile(name.removeSuffix(".jpg"))

@@ -8,6 +8,8 @@ import android.provider.OpenableColumns
 import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
+import com.mrlaki5.mystockmanager.metadata.EmbeddedMetadataReader
+import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -34,6 +36,8 @@ data class ImportSummary(
  * The source in the camera roll is opened read-only here; trashing it afterwards is the
  * caller's opt-in step, see [OriginalTrash].
  *
+ * Metadata a picked file already embeds, say from another keywording tool, is taken over.
+ *
  * Runs while the caller still holds the URI grant: grants from a share intent are
  * transient, so this must not be deferred to a background worker holding raw URIs.
  */
@@ -45,14 +49,15 @@ class ImportCopier @Inject constructor(
     private val imageDao: ImageDao,
 ) {
 
-    suspend fun import(uris: List<Uri>, folderId: Long, eventName: String): ImportSummary =
+    /** [eventHint] lets a caption lead naming the event's place be split off the description. */
+    suspend fun import(uris: List<Uri>, folderId: Long, eventName: String, eventHint: String?): ImportSummary =
         withContext(Dispatchers.IO) {
             val imported = mutableListOf<Uri>()
             var duplicates = 0
             var failed = 0
 
             for (uri in uris) {
-                when (importOne(uri, folderId, eventName)) {
+                when (importOne(uri, folderId, eventName, eventHint)) {
                     Outcome.IMPORTED -> imported += uri
                     Outcome.DUPLICATE -> duplicates++
                     Outcome.FAILED -> failed++
@@ -63,7 +68,7 @@ class ImportCopier @Inject constructor(
 
     private enum class Outcome { IMPORTED, DUPLICATE, FAILED }
 
-    private suspend fun importOne(uri: Uri, folderId: Long, eventName: String): Outcome =
+    private suspend fun importOne(uri: Uri, folderId: Long, eventName: String, eventHint: String?): Outcome =
         fileStore.withTempFile("import") { temp ->
             try {
                 val sha = copyAndHash(uri, temp) ?: return@withTempFile Outcome.FAILED
@@ -87,6 +92,10 @@ class ImportCopier @Inject constructor(
                 // backfill to retry once the scan has caught up.
                 val capturedOn = CaptureDate.readFrom(temp)
                     ?: mediaStore.dateTakenMillis(published)?.let(CaptureDate::fromEpochMillis)
+                val metadata = EmbeddedMetadataReader.read(temp)?.let {
+                    ParsedMetadata.of(it.title, it.caption, it.keywords, it.category, capturedOn, eventHint)
+                }
+                val now = System.currentTimeMillis()
 
                 imageDao.insert(
                     ImageEntity(
@@ -96,10 +105,17 @@ class ImportCopier @Inject constructor(
                         widthPx = bounds.outWidth,
                         heightPx = bounds.outHeight,
                         byteSize = temp.length(),
-                        importedAt = System.currentTimeMillis(),
+                        importedAt = now,
                         capturedOn = capturedOn,
-                        state = ImageState.FILED,
+                        state = ImageState.of(metadata),
+                        title = metadata?.title,
+                        description = metadata?.description,
+                        keywords = metadata?.keywords.orEmpty(),
+                        category = metadata?.category,
+                        generatedAt = now.takeIf { metadata?.generated == true },
                         mediaStoreUri = published.toString(),
+                        captionPlace = metadata?.captionPlace,
+                        embeddedChecked = true,
                     )
                 )
                 Outcome.IMPORTED

@@ -26,4 +26,6 @@ data class SyncImageEntity(
     /** The version NextCloud refused, so the same bytes are not retried on every run. */
     val failedVersion: Long? = null,
     val error: String? = null,
+    /** The [ImageEntity.metadataVersion] in the folder's uploaded CSV; null means it is not in it yet. */
+    val csvVersion: Long? = null,
 )

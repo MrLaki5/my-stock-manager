@@ -1,9 +1,12 @@
 package com.mrlaki5.mystockmanager.nextcloud
 
+import com.mrlaki5.mystockmanager.metadata.AgencyCsv
+import com.mrlaki5.mystockmanager.metadata.CsvRow
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -31,6 +34,10 @@ class NextcloudSyncEngineTest {
         drive.calls.clear()
         return sync()
     }
+
+    private val csvPath = "Beach/${AgencyCsv.FILE_NAME}"
+
+    private fun cloudCsv(): Map<String, CsvRow> = AgencyCsv.read(drive.bodies.getValue(csvPath))
 
     @Test
     fun `creates the event folder and uploads its images`() {
@@ -291,5 +298,161 @@ class NextcloudSyncEngineTest {
         assertEquals(SyncOutcome.Done, syncFresh())
         assertEquals("Sunset", store.syncFolders.getValue(1).remoteName)
         assertEquals("Beach", store.syncFolders.getValue(2).remoteName)
+    }
+
+    @Test
+    fun `writes the event's CSV once an uploaded image has metadata`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        store.describe(10, "Waves at dusk", listOf("beach", "waves"), category = "Nature")
+
+        assertEquals(SyncOutcome.Done, sync())
+        assertEquals(listOf("LIST Beach", "PUT $csvPath"), drive.calls.takeLast(2))
+        val row = cloudCsv().getValue("a.jpg")
+        assertEquals("Waves at dusk", row.title)
+        assertEquals(listOf("beach", "waves"), row.keywords)
+        assertEquals("Nature", row.category)
+        assertEquals(setOf("a.jpg"), cloudCsv().keys)
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(emptyList<String>(), drive.calls)
+    }
+
+    @Test
+    fun `a metadata edit rewrites only the CSV, never the image`() {
+        event(1, "Beach", 10L to "a.jpg")
+        store.describe(10, "Waves", listOf("beach"))
+        sync()
+        store.describe(10, "Waves at dusk", listOf("beach", "dusk"))
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(listOf("ROOT", "LIST Beach", "GET $csvPath", "PUT $csvPath"), drive.calls)
+        assertEquals("Waves at dusk", cloudCsv().getValue("a.jpg").title)
+    }
+
+    @Test
+    fun `an image is left out of the CSV until it is on the cloud`() {
+        event(1, "Beach", 10L to "a.jpg")
+        store.describe(10, "Waves", listOf("beach"))
+        drive.intercept = { call -> if (call == "PUT Beach/a.jpg") DavResult.Transient("reset") else null }
+
+        assertTrue(sync() is SyncOutcome.Retry)
+        assertTrue(drive.calls.none { it.endsWith(AgencyCsv.FILE_NAME) })
+        drive.intercept = { null }
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(setOf("a.jpg"), cloudCsv().keys)
+    }
+
+    @Test
+    fun `an event without metadata gets no CSV`() {
+        event(1, "Beach", 10L to "a.jpg")
+
+        assertEquals(SyncOutcome.Done, sync())
+        assertNull(drive.files[csvPath])
+        assertNull(runBlocking { store.nextAction() })
+    }
+
+    @Test
+    fun `deleting an image with sync on drops its row`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        store.describe(10, "A", listOf("a"))
+        store.describe(11, "B", listOf("b"))
+        sync()
+        store.deleteImage(10)
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(setOf("b.jpg"), cloudCsv().keys)
+    }
+
+    @Test
+    fun `an image deleted with sync off keeps its row while its file stays on the cloud`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        store.describe(10, "A", listOf("a"))
+        store.describe(11, "B", listOf("b"))
+        sync()
+        store.deleteImage(10, tombstone = false)
+        store.describe(11, "B again", listOf("b"))
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(setOf("a.jpg", "b.jpg"), cloudCsv().keys)
+        assertEquals("A", cloudCsv().getValue("a.jpg").title)
+
+        drive.files.remove("Beach/a.jpg")
+        store.describe(11, "B once more", listOf("b"))
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(setOf("b.jpg"), cloudCsv().keys)
+    }
+
+    @Test
+    fun `deleting the last described image settles even when the CSV is already gone from the cloud`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        store.describe(10, "A", listOf("a"))
+        sync()
+        drive.files.remove(csvPath)
+        drive.bodies.remove(csvPath)
+        store.deleteImage(10)
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertNull(runBlocking { store.nextAction() })
+    }
+
+    @Test
+    fun `keeps the cloud's row for an image this phone has no metadata for`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        store.describe(11, "B", listOf("b"))
+        sync()
+        drive.putFile(csvPath, String(AgencyCsv.write(listOf(CsvRow("a.jpg", "From the other phone", "", listOf("a"), null)))))
+        store.describe(11, "B again", listOf("b"))
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals("From the other phone", cloudCsv().getValue("a.jpg").title)
+        assertEquals("B again", cloudCsv().getValue("b.jpg").title)
+    }
+
+    @Test
+    fun `the CSV waits until the event has finished generating`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        sync()
+        store.describe(10, "A", listOf("a"))
+        store.images.getValue(11).generating = true
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertNull(drive.files[csvPath])
+
+        store.images.getValue(11).generating = false
+        store.describe(11, "B", listOf("b"))
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(listOf("ROOT", "LIST Beach", "PUT $csvPath"), drive.calls)
+        assertEquals(setOf("a.jpg", "b.jpg"), cloudCsv().keys)
+    }
+
+    @Test
+    fun `a full check rewrites a CSV deleted on the cloud`() {
+        event(1, "Beach", 10L to "a.jpg")
+        store.describe(10, "Waves", listOf("beach"))
+        sync()
+        drive.files.remove(csvPath)
+        drive.bodies.remove(csvPath)
+        flags.fullCheckRequested = true
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals("Waves", cloudCsv().getValue("a.jpg").title)
+    }
+
+    @Test
+    fun `a renamed event keeps its CSV in the moved folder, and later deletions still reach it`() {
+        event(1, "Beach", 10L to "a.jpg", 11L to "b.jpg")
+        store.describe(10, "Waves", listOf("beach"))
+        store.describe(11, "Sand", listOf("sand"))
+        sync()
+        store.rename(1, "Sunset")
+
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(listOf("ROOT", "MOVE Beach -> Sunset"), drive.calls)
+        val moved = "Sunset/${AgencyCsv.FILE_NAME}"
+        assertEquals("Waves", AgencyCsv.read(drive.bodies.getValue(moved)).getValue("a.jpg").title)
+
+        store.deleteImage(10)
+        assertEquals(SyncOutcome.Done, syncFresh())
+        assertEquals(setOf("b.jpg"), AgencyCsv.read(drive.bodies.getValue(moved)).keys)
     }
 }

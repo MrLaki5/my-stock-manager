@@ -11,9 +11,8 @@ import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
-import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
-import com.mrlaki5.mystockmanager.metadata.MetadataReader
-import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
+import com.mrlaki5.mystockmanager.metadata.EmbeddedMetadataReader
+import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
 import com.mrlaki5.mystockmanager.nextcloud.CloudStatus
@@ -46,7 +45,6 @@ class StockRepository @Inject constructor(
     private val importCopier: ImportCopier,
     private val fileStore: AppFileStore,
     private val mediaStore: MediaStoreExporter,
-    private val embedder: MetadataEmbedder,
     private val syncDao: SyncDao,
     private val nextcloud: NextcloudSettings,
 ) {
@@ -71,59 +69,35 @@ class StockRepository @Inject constructor(
 
 
     /**
-     * Saves hand-edited metadata, writing it into the album file before the row.
-     *
-     * That order matters: the file is what gets uploaded, so a row claiming a keyword the
-     * JPEG does not carry would be a lie the user cannot see. If the embed fails, nothing
-     * is saved and the caller is told why.
-     *
-     * [metadata] carries the caption *body* as its description. The lead is prepended here
-     * rather than by the caller: the caption format is an invariant of the file rather than
-     * a suggestion, so it is applied at the one point that writes it and cannot be bypassed
-     * by a screen that forgot.
-     *
-     * Returns the metadata as stored in the row, whose description is the body again — not
-     * the assembled caption, which would prepend the lead twice if fed back in.
+     * Saves hand-edited metadata, clamped to the agency limits. [metadata] carries the caption
+     * *body* as its description; the CSV prepends the lead.
      */
     suspend fun updateMetadata(imageId: Long, metadata: StockMetadata): Result<StockMetadata> {
         val image = imageDao.getById(imageId)
             ?: return Result.failure(IllegalStateException("This image no longer exists"))
-        val uri = image.mediaStoreUri?.toUri()
-            ?: return Result.failure(IllegalStateException("This image is not in the album"))
 
-        val body = metadata.normalized().description
-        val captioned = metadata.copy(
-            description = EditorialCaption.build(
-                location = image.captionPlace,
-                capturedOn = image.capturedOn,
-                body = body,
-            ),
-        )
-
-        return embedder.embed(uri, captioned).map { written ->
-            val stored = written.copy(description = body)
-            // A running generation will overwrite the row anyway, so only idle images are promoted.
-            if (image.state == ImageState.FILED || image.state == ImageState.GENERATION_FAILED) {
-                imageDao.saveHandWritten(
-                    id = imageId,
-                    title = stored.title,
-                    description = stored.description,
-                    keywords = stored.keywords,
-                    category = stored.category,
-                    state = ImageState.GENERATED,
-                    writtenAt = System.currentTimeMillis(),
-                )
-            } else {
-                imageDao.updateMetadata(
-                    id = imageId,
-                    title = stored.title,
-                    description = stored.description,
-                    keywords = stored.keywords,
-                    category = stored.category,
-                )
-            }
-            stored
+        val stored = metadata.normalized()
+        // A running generation will overwrite the row anyway, so only idle images are promoted.
+        if (image.state == ImageState.FILED || image.state == ImageState.GENERATION_FAILED) {
+            imageDao.saveHandWritten(
+                id = imageId,
+                title = stored.title,
+                description = stored.description,
+                keywords = stored.keywords,
+                category = stored.category,
+                state = ImageState.GENERATED,
+                writtenAt = System.currentTimeMillis(),
+            )
+        } else {
+            imageDao.updateMetadata(
+                id = imageId,
+                title = stored.title,
+                description = stored.description,
+                keywords = stored.keywords,
+                category = stored.category,
+            )
         }
+        return Result.success(stored)
     }
 
     /** Names are unique; returns a message instead of throwing on a collision. */
@@ -212,7 +186,7 @@ class StockRepository @Inject constructor(
     suspend fun importInto(folderId: Long, uris: List<Uri>): ImportSummary {
         val event = folderDao.observeById(folderId).first()
             ?: return ImportSummary(0, 0, uris.size)
-        return importCopier.import(uris, folderId, event.name)
+        return importCopier.import(uris, folderId, event.name, event.hint)
     }
 
     suspend fun reorderEvents(orderedIds: List<Long>) = folderDao.reorder(orderedIds)
@@ -243,25 +217,30 @@ class StockRepository @Inject constructor(
         }
     }
 
-    /** Reads the caption place back from files captioned before it was stored per image. */
-    suspend fun backfillCaptionPlaces() = withContext(Dispatchers.IO) {
-        for (image in imageDao.getWithoutCaptionPlace()) {
+    /** Reads each album file's embedded metadata once, for images with none of their own; sync then puts it in the CSV. */
+    suspend fun adoptEmbeddedMetadata() = withContext(Dispatchers.IO) {
+        for (image in imageDao.getUncheckedForEmbedded()) {
             val uri = image.mediaStoreUri?.toUri() ?: continue
-            val temp = fileStore.newTempFile("place")
-            try {
-                val caption = runCatching {
-                    mediaStore.copyTo(uri, temp)
-                    MetadataReader.read(temp).iptcDescription
-                }.getOrNull()
-                val body = image.description.orEmpty()
-                val place = caption?.let {
-                    EditorialCaption.placeOf(it, body, image.capturedOn)
-                        ?: EditorialCaption.parse(it, image.capturedOn, image.folderId?.let { id -> folderDao.observeById(id).first()?.hint }).location
-                }
-                imageDao.setCaptionPlace(image.id, place.orEmpty())
-            } finally {
-                temp.delete()
+            // A file that cannot be read now is retried on the next launch.
+            val embedded = fileStore.withTempFile("embedded") { temp ->
+                runCatching { mediaStore.copyTo(uri, temp) }.map { EmbeddedMetadataReader.read(temp) }
+            }.getOrElse { continue }
+            if (embedded == null) {
+                imageDao.markEmbeddedChecked(image.id)
+                continue
             }
+            val hint = image.folderId?.let { folderDao.observeById(it).first()?.hint }
+            val metadata = ParsedMetadata.of(embedded.title, embedded.caption, embedded.keywords, embedded.category, image.capturedOn, hint)
+            imageDao.adoptEmbedded(
+                id = image.id,
+                title = metadata.title,
+                description = metadata.description,
+                captionPlace = metadata.captionPlace,
+                keywords = metadata.keywords,
+                category = metadata.category,
+                state = ImageState.of(metadata),
+                generatedAt = System.currentTimeMillis().takeIf { metadata.generated },
+            )
         }
     }
 
@@ -273,8 +252,7 @@ class StockRepository @Inject constructor(
 
     /**
      * One-time move of images imported before the app kept a single copy in the album.
-     * Publishes the best available private copy (the metadata-embedded one if
-     * generation had already run) and then removes the private directories.
+     * Publishes the best available private copy and then removes the private directories.
      */
     suspend fun migrateLegacyPrivateFiles() {
         val orphans = imageDao.getWithoutMediaStoreUri()

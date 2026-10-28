@@ -11,8 +11,6 @@ import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
 import com.mrlaki5.mystockmanager.generation.GenerationProvider
-import com.mrlaki5.mystockmanager.metadata.MetadataEmbedder
-import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
 import com.mrlaki5.mystockmanager.ondevice.OnDeviceClient
 import com.mrlaki5.mystockmanager.ondevice.OnDeviceModel
 import com.mrlaki5.mystockmanager.ondevice.OnDeviceModelStore
@@ -29,15 +27,12 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 /**
- * Generates and embeds metadata for exactly one image, rewriting it in place in the
- * album.
+ * Generates metadata for exactly one image. The album file is only read; metadata lives in
+ * the row and reaches the agencies through the event's CSV.
  *
  * One worker per image, not one per batch: that is what gives partial-failure
  * isolation, per-image progress, and independent retry. A failure here marks its own
  * row and leaves every sibling untouched.
- *
- * The album file is only overwritten after the embedded copy has been read back and
- * verified, so a failed embed can never damage the image the user already has.
  *
  * Any failure puts the image back in the state it had before generation and is reported
  * through [GenerationAlerts]; it is never left on GENERATING.
@@ -53,7 +48,6 @@ class GenerateMetadataWorker @AssistedInject constructor(
     private val openAiClient: OpenAiClient,
     private val onDeviceClient: OnDeviceClient,
     private val modelStore: OnDeviceModelStore,
-    private val embedder: MetadataEmbedder,
     private val workScheduler: WorkScheduler,
     private val alerts: GenerationAlerts,
 ) : CoroutineWorker(context, params) {
@@ -131,44 +125,23 @@ class GenerateMetadataWorker @AssistedInject constructor(
 
                 is GenerationResult.Terminal -> giveUp(imageId, result.message, result.stopsBatch)
 
-                // Once the model has answered, finish the write even if cancelled, so file and row agree.
+                // Once the model has answered, save it even if cancelled.
                 is GenerationResult.Success -> withContext(NonCancellable) {
                     // Only a hint can name the place; a model guessing one from pixels is ignored.
                     val place = result.place.takeIf { hint != null }
-                    // The model writes the caption body; the app owns the caption's shape.
-                    // Prepending the lead here rather than asking for it is what makes the
-                    // format guaranteed instead of merely requested.
-                    val body = result.metadata.description
-                    val captioned = result.metadata.copy(
-                        description = EditorialCaption.build(
-                            location = place,
-                            capturedOn = image.capturedOn,
-                            body = body,
-                        ),
-                    )
-
-                    // The embedder verifies the round trip before overwriting, and hands
-                    // back what it actually wrote: the clamped values, so the row and the
-                    // file cannot disagree about field limits.
-                    val written = embedder.embedFrom(source, mediaUri, captioned)
-                        .getOrElse { return@withContext giveUp(imageId, it.message ?: "Embedding failed") }
-
-                    val now = System.currentTimeMillis()
+                    // The row keeps the caption body; the CSV prepends the lead when it is written.
+                    val written = result.metadata.normalized()
                     imageDao.saveGenerated(
                         id = imageId,
                         title = written.title,
-                        // The row keeps the body, the file the assembled caption. Storing
-                        // the assembled form would prepend the lead a second time on the
-                        // next edit.
-                        description = body,
+                        description = written.description,
                         keywords = written.keywords,
                         category = written.category,
                         state = ImageState.GENERATED,
-                        generatedAt = now,
+                        generatedAt = System.currentTimeMillis(),
                         model = modelId,
                         captionPlace = place.orEmpty(),
                     )
-                    imageDao.markExported(imageId, image.mediaStoreUri, now)
                     Result.success()
                 }
             }

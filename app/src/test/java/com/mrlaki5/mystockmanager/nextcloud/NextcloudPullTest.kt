@@ -1,5 +1,8 @@
 package com.mrlaki5.mystockmanager.nextcloud
 
+import com.mrlaki5.mystockmanager.metadata.AgencyCsv
+import com.mrlaki5.mystockmanager.metadata.CsvRow
+import com.mrlaki5.mystockmanager.metadata.EmbeddedMetadata
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.assertEquals
@@ -22,15 +25,23 @@ class NextcloudPullTest {
     private val album by lazy { FakeAlbum(temp.newFolder()) }
     private val pull by lazy { NextcloudPull(store, flags, { drive }, album) }
 
-    private val beachShot = InspectedImage(
-        widthPx = 1600,
-        heightPx = 1200,
-        capturedOn = "2026-05-23",
-        title = "Waves at dusk",
-        caption = "Belgrade, Serbia - May 23, 2026: Waves roll onto an empty beach.",
-        keywords = listOf("beach", "waves", "dusk"),
-        category = "Travel",
+    private val beachShot = InspectedImage(widthPx = 1600, heightPx = 1200, capturedOn = "2026-05-23", embedded = null)
+
+    private val olderVersionShot = beachShot.copy(
+        embedded = EmbeddedMetadata(
+            title = "Old waves",
+            caption = "Belgrade, Serbia - May 23, 2026: Waves from before the CSV.",
+            keywords = listOf("beach", "old"),
+            category = "Nature",
+        ),
     )
+
+    private fun row(fileName: String, caption: String = "Belgrade, Serbia - May 23, 2026: Waves roll onto an empty beach.") =
+        CsvRow(fileName, "Waves at dusk", caption, listOf("beach", "waves", "dusk"), "Parks/Outdoor")
+
+    private fun putCsv(folder: String, vararg rows: CsvRow) {
+        drive.putFile("$folder/${AgencyCsv.FILE_NAME}", String(AgencyCsv.write(rows.toList())))
+    }
 
     private fun run(): PullOutcome = runBlocking { pull.run() }
 
@@ -44,7 +55,9 @@ class NextcloudPullTest {
     private fun syncedLocal(imageId: Long, folderId: Long, key: String, content: String) {
         store.addImage(imageId, folderId, key.substringAfter('/'))
         album.entries[store.images.getValue(imageId).uri] = content.toByteArray()
-        store.syncImages[imageId] = FakeSyncStore.SyncImage(key.substringAfter('/'), syncedVersion = 1, remoteSize = content.length.toLong())
+        store.syncImages[imageId] = FakeSyncStore.SyncImage(
+            key.substringAfter('/'), syncedVersion = 1, remoteSize = content.length.toLong(), csvVersion = 1,
+        )
     }
 
     @Test
@@ -52,6 +65,7 @@ class NextcloudPullTest {
         drive.putFile("Beach/a.jpg", "A")
         drive.putFile("Beach/b.jpg", "BB")
         drive.putFile("Sunset/c.jpg", "CCC")
+        putCsv("Beach", row("a.jpg"))
         album.inspectsAs("A", beachShot)
         album.inspectsAs("BB")
         album.inspectsAs("CCC")
@@ -67,7 +81,7 @@ class NextcloudPullTest {
         assertEquals("Waves at dusk", a.title)
         assertEquals("Waves roll onto an empty beach.", a.description)
         assertEquals(listOf("beach", "waves", "dusk"), a.keywords)
-        assertEquals("Travel", a.category)
+        assertEquals("Parks/Outdoor", a.category)
         assertEquals("2026-05-23", a.capturedOn)
         assertEquals("Belgrade, Serbia", eventNamed("Beach").location)
         assertNull(imageNamed("b.jpg").title)
@@ -92,6 +106,7 @@ class NextcloudPullTest {
         store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
         syncedLocal(10, 1, "Beach/a.jpg", "old")
         drive.putFile("Beach/a.jpg", "newer")
+        putCsv("Beach", row("a.jpg"))
         album.inspectsAs("newer", beachShot)
 
         assertEquals(PullSummary(replaced = 1), summary(run()))
@@ -198,9 +213,13 @@ class NextcloudPullTest {
         drive.putFile("Trip/a.jpg", "A")
         drive.putFile("Trip/b.jpg", "B")
         drive.putFile("Trip/c.jpg", "C")
-        album.inspectsAs("A", beachShot.copy(caption = "Sremska Mitrovica, Serbia - May 23, 2026: A bridge."))
-        album.inspectsAs("B", beachShot.copy(caption = "Šabac, Serbia - May 23, 2026: A fair."))
-        album.inspectsAs("C", beachShot.copy(caption = "Šabac, Serbia - May 23, 2026: A parrot."))
+        putCsv(
+            "Trip",
+            row("a.jpg", "Sremska Mitrovica, Serbia - May 23, 2026: A bridge."),
+            row("b.jpg", "Šabac, Serbia - May 23, 2026: A fair."),
+            row("c.jpg", "Šabac, Serbia - May 23, 2026: A parrot."),
+        )
+        listOf("A", "B", "C").forEach { album.inspectsAs(it, beachShot) }
 
         run()
         assertEquals("Šabac, Serbia", eventNamed("Trip").location)
@@ -213,6 +232,7 @@ class NextcloudPullTest {
     fun `keeps a location the event already has`() {
         store.addEvent(1, "Trip", location = "Novi Sad")
         drive.putFile("Trip/a.jpg", "A")
+        putCsv("Trip", row("a.jpg"))
         album.inspectsAs("A", beachShot)
 
         run()
@@ -223,7 +243,8 @@ class NextcloudPullTest {
     fun `strips a known location from an undated caption`() {
         store.addEvent(1, "Vevey", location = "Vevey, Switzerland")
         drive.putFile("Vevey/a.jpg", "A")
-        album.inspectsAs("A", beachShot.copy(capturedOn = null, caption = "Vevey, Switzerland: The lake at noon."))
+        putCsv("Vevey", row("a.jpg", "Vevey, Switzerland: The lake at noon."))
+        album.inspectsAs("A", beachShot.copy(capturedOn = null))
 
         run()
         assertEquals("The lake at noon.", imageNamed("a.jpg").description)
@@ -261,6 +282,132 @@ class NextcloudPullTest {
     }
 
     @Test
+    fun `a CSV changed on the cloud updates metadata without downloading the image`() {
+        store.addEvent(1, "Beach")
+        store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach", csvSyncedVersion = 1)
+        syncedLocal(10, 1, "Beach/a.jpg", "same")
+        store.describe(10, "Old title", listOf("old"))
+        store.syncImages.getValue(10).csvVersion = store.images.getValue(10).metadataVersion
+        drive.putFile("Beach/a.jpg", "same")
+        putCsv("Beach", row("a.jpg"))
+
+        assertEquals(PullSummary(updated = 1), summary(run()))
+        assertEquals("Waves at dusk", store.images.getValue(10).title)
+        assertEquals(listOf("GET Beach/${AgencyCsv.FILE_NAME}"), drive.calls.filter { it.startsWith("GET") })
+        assertNull(runBlocking { store.nextAction() })
+
+        drive.calls.clear()
+        assertEquals(PullSummary(unchanged = 1), summary(run()))
+    }
+
+    @Test
+    fun `a folder without a CSV keeps the phone's metadata, even for a replaced file`() {
+        store.addEvent(1, "Beach")
+        store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
+        syncedLocal(10, 1, "Beach/a.jpg", "old")
+        store.describe(10, "Phone title", listOf("phone"))
+        drive.putFile("Beach/a.jpg", "newer")
+        album.inspectsAs("newer", beachShot)
+
+        assertEquals(PullSummary(replaced = 1), summary(run()))
+        assertEquals("Phone title", store.images.getValue(10).title)
+        assertEquals(listOf("phone"), store.images.getValue(10).keywords)
+    }
+
+    @Test
+    fun `a CSV without some columns keeps the phone's values for them`() {
+        store.addEvent(1, "Beach")
+        store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
+        syncedLocal(10, 1, "Beach/a.jpg", "same")
+        store.describe(10, "Phone title", listOf("phone"), description = "Phone body.", category = "Nature")
+        drive.putFile("Beach/a.jpg", "same")
+        drive.putFile("Beach/${AgencyCsv.FILE_NAME}", "Filename,Title,Keywords,Category\na.jpg,Adobe title,,11\nb.jpg,,x,11\n")
+
+        assertEquals(PullSummary(updated = 1), summary(run()))
+        val image = store.images.getValue(10)
+        assertEquals("Adobe title", image.title)
+        assertEquals("Phone body.", image.description)
+        assertEquals(listOf("phone"), image.keywords)
+        assertEquals("Nature", image.category)
+    }
+
+    @Test
+    fun `an image without a description makes the round trip unchanged`() {
+        store.addEvent(1, "Beach")
+        store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
+        syncedLocal(10, 1, "Beach/a.jpg", "same")
+        store.images.getValue(10).capturedOn = "2026-05-23"
+        store.describe(10, "Waves", listOf("beach"), description = "")
+        val engine = NextcloudSyncEngine(store, flags, { drive }, FakeFiles())
+        drive.putFile("Beach/a.jpg", "same")
+        runBlocking { engine.run() }
+
+        assertEquals("May 23, 2026:", AgencyCsv.read(drive.bodies.getValue("Beach/${AgencyCsv.FILE_NAME}")).getValue("a.jpg").description)
+        assertEquals(PullSummary(unchanged = 1), summary(run()))
+        assertEquals("", store.images.getValue(10).description.orEmpty())
+    }
+
+    @Test
+    fun `the CSV is never imported as an image`() {
+        drive.putFile("Beach/a.jpg", "A")
+        putCsv("Beach", row("a.jpg"))
+        album.inspectsAs("A")
+
+        assertEquals(PullSummary(newEvents = 1, added = 1), summary(run()))
+        assertEquals(listOf("a.jpg"), store.images.values.map { it.displayName })
+    }
+
+    @Test
+    fun `a folder from before the CSV brings its embedded metadata, and sync writes it into a CSV`() {
+        drive.putFile("Beach/a.jpg", "A")
+        album.inspectsAs("A", olderVersionShot)
+
+        assertEquals(PullSummary(newEvents = 1, added = 1), summary(run()))
+        val a = imageNamed("a.jpg")
+        assertEquals("Old waves", a.title)
+        assertEquals("Waves from before the CSV.", a.description)
+        assertEquals("Belgrade, Serbia", a.captionPlace)
+        assertTrue(runBlocking { store.nextAction() } is SyncAction.WriteCsv)
+    }
+
+    @Test
+    fun `a CSV row beats what the file embeds`() {
+        drive.putFile("Beach/a.jpg", "A")
+        putCsv("Beach", row("a.jpg"))
+        album.inspectsAs("A", olderVersionShot)
+
+        run()
+        assertEquals("Waves at dusk", imageNamed("a.jpg").title)
+        assertNull(runBlocking { store.nextAction() })
+    }
+
+    @Test
+    fun `embedded metadata never overrides the phone's own`() {
+        store.addEvent(1, "Beach")
+        store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
+        syncedLocal(10, 1, "Beach/a.jpg", "old")
+        store.describe(10, "Phone title", listOf("phone"))
+        drive.putFile("Beach/a.jpg", "newer")
+        album.inspectsAs("newer", olderVersionShot)
+
+        assertEquals(PullSummary(replaced = 1), summary(run()))
+        assertEquals("Phone title", store.images.getValue(10).title)
+    }
+
+    @Test
+    fun `a replaced file fills a phone image that had no metadata`() {
+        store.addEvent(1, "Beach")
+        store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
+        syncedLocal(10, 1, "Beach/a.jpg", "old")
+        drive.putFile("Beach/a.jpg", "newer")
+        album.inspectsAs("newer", olderVersionShot)
+
+        run()
+        assertEquals("Old waves", store.images.getValue(10).title)
+        assertTrue(store.isCsvStale(1))
+    }
+
+    @Test
     fun `summaries read naturally`() {
         assertEquals("Already up to date with NextCloud", PullSummary(unchanged = 4).describe())
         assertEquals("Added 33 images into 4 new events", PullSummary(newEvents = 4, added = 33).describe())
@@ -270,5 +417,6 @@ class NextcloudPullTest {
             PullSummary(added = 2, replaced = 1, skipped = 1).describe(),
         )
         assertEquals("Replaced 3 with the cloud's version", PullSummary(replaced = 3).describe())
+        assertEquals("Updated the metadata of 2", PullSummary(updated = 2, unchanged = 5).describe())
     }
 }

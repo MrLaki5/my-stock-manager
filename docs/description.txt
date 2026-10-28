@@ -1,4 +1,4 @@
-MyStockManager prepares your photos for stock agencies such as Adobe Stock and Shutterstock. Let AI draft a title, description, and keywords for each image, with OpenAI or with models that run on your phone, or write them yourself. Either way, they are written into the JPEG file itself, so it is already there when you upload.
+MyStockManager prepares your photos for stock agencies such as Adobe Stock and Shutterstock. Let AI draft a title, description, and keywords for each image, with OpenAI or with models that run on your phone, or write them yourself. Each event gets one CSV that both agencies accept, synced to your NextCloud.
 
 HOW IT WORKS
 • Create an event for each shoot, day or theme.
@@ -8,11 +8,11 @@ HOW IT WORKS
 • Or write the metadata by hand. Open any image and type the title, description, keywords and category yourself.
 • Steer OpenAI with your own instructions by editing the system prompt in Settings. The on-device model doesn't use it.
 • Review and edit everything, including every keyword.
-• Save, and the metadata is written into the file as IPTC and XMP, the fields stock agencies read on upload.
+• Save, and the event's CSV on your NextCloud is updated. Upload it after the photos and every field is filled in.
 
 BUILT FOR STOCK WORK
 • Keywords are capped at 49, so one set fits both Adobe Stock and Shutterstock, with a warning if you have fewer than 7.
-• Metadata is embedded without re-encoding. Pixels are left untouched, and every write is checked before the album file is replaced.
+• Your photo files are never changed.
 • With OpenAI, captions lead with the place, when your hint names one, and the date taken.
 • Generation runs in the background, image by image, and retries network hiccups on its own.
 • No duplicates in your gallery: optionally move the originals to the trash after import. You confirm each time, and they can be restored for 30 days.
@@ -24,12 +24,13 @@ ON-DEVICE GENERATION (OPTIONAL)
 • Download it once in Settings (about 0.4 GB, from Hugging Face over Wi-Fi or mobile data) and delete it any time.
 • Photos and hints never leave your phone. The text is simpler than OpenAI's, so review it with care.
 
-OPTIONAL NEXTCLOUD BACKUP
-• Sync every event to your own NextCloud server, one folder per event, over Wi-Fi only by default.
-• Pull everything back after reinstalling or on a new phone. Metadata is read back from the files.
+NEXTCLOUD SYNC
+• Sync every event to your own NextCloud server, one folder per event with its metadata CSV, over Wi-Fi only by default.
+• Pull everything back after reinstalling or on a new phone.
+• Photos already keyworded in another tool keep their keywords.
 
 YOU STAY IN CONTROL
-• Uploading stays manual. The app never logs in to or submits to any agency. You add the files in the agency's upload form, just like photos you keyworded in Lightroom or Bridge.
+• Uploading stays manual. The app never logs in to or submits to any agency. You add the files and the CSV in the agency's upload form yourself.
 • AI is optional, and it never creates or changes your photos. It only drafts the text, and it is up to you to check that the text describes each image accurately.
 • With OpenAI, photos are sent only when you tap Generate. They are downscaled and have location data removed first. Metadata you write by hand is never sent to OpenAI, and on-device generation sends nothing. There is no account, no ads and no analytics, and the developer receives none of your data.
 • Source available under the PolyForm Noncommercial license. Code and issues at https://github.com/MrLaki5/my-stock-manager
@@ -37,6 +38,7 @@ YOU STAY IN CONTROL
 REQUIREMENTS
 • For AI drafting, either the on-device model (0.4 GB download, 64-bit ARM phone) or your own OpenAI API key, entered in Settings. OpenAI bills your API account for what you use. gpt-6-luna is much cheaper per image; gpt-6.1-sol gives stronger keywords. Higher reasoning costs more and is slower. With neither, you can still write all the metadata by hand.
 • JPEG photos.
+• A NextCloud server, to get the metadata CSV off the phone.
 • Android 10 or later.
 
 MyStockManager is not affiliated with, endorsed by or sponsored by Adobe, Shutterstock, OpenAI, Hugging Face, Liquid AI or Google.

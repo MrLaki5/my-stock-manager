@@ -42,11 +42,7 @@ data class MetadataDraft(
     val keywords: List<String>,
     val category: String,
 ) {
-    /**
-     * Embedding an empty title or description writes IPTC records that read back as absent
-     * rather than empty, which then fails verification. An empty body would also leave the
-     * caption as a bare "Belgrade, Serbia - May 23, 2026:".
-     */
+    /** Both agencies require a title and a description; an empty body would also leave a bare "Belgrade, Serbia - May 23, 2026:". */
     val canSave: Boolean get() = title.isNotBlank() && description.isNotBlank()
 
     companion object {
@@ -100,17 +96,15 @@ class ImageDetailViewModel @AssistedInject constructor(
     private val _draft = MutableStateFlow<MetadataDraft?>(null)
     val draft: StateFlow<MetadataDraft?> = _draft.asStateFlow()
 
-    /** What is currently on disk, so [dirty] knows what an edit is being compared against. */
+    /** What is currently saved, so [dirty] knows what an edit is being compared against. */
     private val _saved = MutableStateFlow<MetadataDraft?>(null)
 
     private val _lead = MutableStateFlow<CaptionLead?>(null)
 
-    /**
-     * The description exactly as saving would write it into the file. Recomputed as the body
-     * is typed rather than fetched, so the screen shows the real caption live; the
-     * repository assembles it again from the same inputs when it writes, so the two cannot
-     * disagree.
-     */
+    /** The row as last read, which an edit holds back and a discard returns to. */
+    private var latest: MetadataDraft? = null
+
+    /** The description exactly as the CSV will carry it, recomputed live from the same inputs. */
     val caption: StateFlow<String> = combine(_draft, _lead) { draft, lead ->
         if (draft == null) "" else EditorialCaption.build(
             location = lead?.location,
@@ -136,9 +130,9 @@ class ImageDetailViewModel @AssistedInject constructor(
                 .map { CaptionLead(it.captionPlace, it.capturedOn) to MetadataDraft.of(it) }
                 .distinctUntilChanged()
                 .collect { (lead, draft) ->
-                    if (_draft.value != _saved.value) return@collect
                     _lead.value = lead
-                    seed(draft)
+                    latest = draft
+                    if (_draft.value == _saved.value) seed(draft)
                 }
         }
     }
@@ -198,8 +192,9 @@ class ImageDetailViewModel @AssistedInject constructor(
         )
     }
 
+    // The row may have changed under the edit, e.g. by a pull, so this is not always what the edit started from.
     fun discard() {
-        _draft.value = _saved.value
+        latest?.let(::seed)
     }
 
     fun save() {
@@ -209,7 +204,7 @@ class ImageDetailViewModel @AssistedInject constructor(
             _busy.value = true
             val request = StockMetadata(
                 title = draft.title,
-                // The body. The repository prepends the place and date.
+                // The body; the CSV prepends the place and date.
                 description = draft.description,
                 keywords = draft.keywords,
                 category = draft.category.trim().takeIf { it.isNotEmpty() },
@@ -226,7 +221,7 @@ class ImageDetailViewModel @AssistedInject constructor(
                             category = written.category.orEmpty(),
                         )
                     )
-                    _message.value = "Saved and written into the image"
+                    _message.value = "Saved"
                 }
                 .onFailure { _message.value = it.message ?: "Could not save" }
             _busy.value = false

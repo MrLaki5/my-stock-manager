@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 
 /**
  * Where an image sits in the pipeline. Each stage is entered by an explicit user
@@ -20,11 +21,16 @@ enum class ImageState {
     /** A generation worker is running for this image. */
     GENERATING,
 
-    /** Metadata generated, embedded into the export copy, and read back verified. */
+    /** Metadata generated or written by hand. */
     GENERATED,
 
     /** Legacy: failures now restore the previous state, but rows written before that may still hold it. */
-    GENERATION_FAILED,
+    GENERATION_FAILED;
+
+    companion object {
+        /** Where metadata from a CSV or a file puts an image: generated only when it is complete. */
+        fun of(metadata: ParsedMetadata?): ImageState = if (metadata?.generated == true) GENERATED else FILED
+    }
 }
 
 /** What MediaStore says about the album file, refreshed by `AlbumWatcher`. */
@@ -88,6 +94,10 @@ data class ImageEntity(
     val captionPlace: String? = null,
     /** Bumped each time the album file is rewritten, so sync knows the cloud copy is stale. */
     @ColumnInfo(defaultValue = "1") val fileVersion: Long = 1,
+    /** Bumped on every metadata change, so sync knows the event's CSV is stale. */
+    @ColumnInfo(defaultValue = "1") val metadataVersion: Long = 1,
+    /** The file has been read for metadata embedded before the CSV, so it is not read again. */
+    @ColumnInfo(defaultValue = "0") val embeddedChecked: Boolean = false,
     @ColumnInfo(defaultValue = "PRESENT") val albumState: AlbumState = AlbumState.PRESENT,
     /** When the system trash purges the file; null unless [albumState] is TRASHED and the trash said. */
     val trashExpiresAt: Long? = null,

@@ -41,7 +41,8 @@ class MyStockManagerApp : Application(), Configuration.Provider {
             runCatching { repository.resetStuckGenerating() }
             runCatching { repository.migrateLegacyPrivateFiles() }
             runCatching { repository.backfillCaptureDates() }
-            runCatching { repository.backfillCaptionPlaces() }
+            // After the capture dates, which a caption lead is recognised by.
+            runCatching { repository.adoptEmbeddedMetadata() }
         }
         appScope.launch { syncCoordinator.get().start(appScope) }
         albumWatcher.start(appScope)

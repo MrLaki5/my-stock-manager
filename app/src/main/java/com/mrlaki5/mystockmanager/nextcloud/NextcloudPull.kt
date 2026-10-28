@@ -1,6 +1,8 @@
 package com.mrlaki5.mystockmanager.nextcloud
 
-import com.mrlaki5.mystockmanager.metadata.model.EditorialCaption
+import com.mrlaki5.mystockmanager.metadata.AgencyCsv
+import com.mrlaki5.mystockmanager.metadata.CsvRow
+import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.security.MessageDigest
@@ -11,6 +13,7 @@ data class PullSummary(
     val newEvents: Int = 0,
     val added: Int = 0,
     val replaced: Int = 0,
+    val updated: Int = 0,
     val unchanged: Int = 0,
     val skipped: Int = 0,
 ) {
@@ -21,9 +24,10 @@ data class PullSummary(
                 add("Added $added image${plural(added)}$into")
             }
             if (replaced > 0) add("replaced $replaced with the cloud's version")
+            if (updated > 0) add("updated the metadata of $updated")
             if (skipped > 0) add("skipped $skipped file${plural(skipped)} that could not be used")
         }
-        if (added == 0 && replaced == 0) {
+        if (added == 0 && replaced == 0 && updated == 0) {
             return listOf("Already up to date with NextCloud").plus(parts).joinToString(" · ")
         }
         return parts.joinToString(" · ").replaceFirstChar { it.uppercase() }
@@ -46,7 +50,7 @@ sealed interface PullState {
     data class Failed(val id: String, val message: String) : PullState
 }
 
-/** Cloud → phone, only when asked: each root folder becomes an event, the cloud wins a clash, nothing local is deleted. */
+/** Cloud → phone, only when asked: each root folder is an event, the cloud and its CSV win a clash, nothing local is deleted. */
 @Singleton
 class NextcloudPull @Inject constructor(
     private val store: PullStore,
@@ -66,29 +70,41 @@ class NextcloudPull @Inject constructor(
             is DavResult.Ok -> root.value.orEmpty().filter { it.isCollection && !it.name.startsWith(".") && it.name !in pending }
             is DavResult.Failure -> return outcomeOf(root)
         }
-        val plan = mutableListOf<Pair<String, List<DavEntry>>>()
+        val plan = mutableListOf<RemoteFolder>()
         for (folder in remoteFolders) {
             when (val listing = drive.list(listOf(folder.name))) {
                 is DavResult.Ok -> listing.value?.let { entries ->
-                    plan += folder.name to entries.filter {
-                        !it.isCollection && isImageName(it.name) && "${folder.name}/${it.name}" !in pending
-                    }
+                    plan += RemoteFolder(
+                        name = folder.name,
+                        files = entries.filter {
+                            !it.isCollection && isImageName(it.name) && "${folder.name}/${it.name}" !in pending
+                        },
+                        hasCsv = entries.any { !it.isCollection && it.name == AgencyCsv.FILE_NAME },
+                    )
                 }
                 is DavResult.Failure -> return outcomeOf(listing)
             }
         }
 
-        val total = plan.sumOf { it.second.size }
+        val total = plan.sumOf { it.files.size }
         var done = 0
         onProgress(done, total)
 
         val tally = Tally()
         val locals = store.localFolders().toMutableList()
-        for ((remoteName, files) in plan) {
-            val target = Target(resolveFolder(remoteName, locals, tally))
+        for (folder in plan) {
+            val target = Target(resolveFolder(folder.name, locals, tally))
+            val rows = if (folder.hasCsv) {
+                when (val read = readCsv(drive, folder.name)) {
+                    is DavResult.Ok -> read.value.also { store.csvFound(target.id) }
+                    is DavResult.Failure -> return outcomeOf(read)
+                }
+            } else {
+                emptyMap()
+            }
             val images = store.localImages(target.id)
-            for (file in files) {
-                pullFile(drive, target, remoteName, file, images, tally)?.let { return it }
+            for (file in folder.files) {
+                pullFile(drive, target, folder.name, file, rows[file.name], images, tally)?.let { return it }
                 onProgress(++done, total)
             }
             // A shoot can span places; the event keeps the one most of its captions name.
@@ -113,12 +129,26 @@ class NextcloudPull @Inject constructor(
         return store.createLinkedEvent(remoteName, remoteName, System.currentTimeMillis()).also { locals += it }
     }
 
+    private suspend fun readCsv(drive: RemoteDrive, remoteFolder: String): DavResult<Map<String, CsvRow>> {
+        val temp = album.newTempFile()
+        try {
+            return when (val result = drive.download(listOf(remoteFolder, AgencyCsv.FILE_NAME), temp)) {
+                is DavResult.Ok -> DavResult.Ok(if (result.value) AgencyCsv.read(temp.readBytes()) else emptyMap())
+                is DavResult.ItemRejected, is DavResult.ParentMissing -> DavResult.Ok(emptyMap())
+                is DavResult.Failure -> result
+            }
+        } finally {
+            temp.delete()
+        }
+    }
+
     /** Null means carry on with the next file. */
     private suspend fun pullFile(
         drive: RemoteDrive,
         target: Target,
         remoteFolder: String,
         entry: DavEntry,
+        row: CsvRow?,
         images: List<LocalImage>,
         tally: Tally,
     ): PullOutcome? {
@@ -131,10 +161,10 @@ class NextcloudPull @Inject constructor(
             val inSync = match.remoteFileName == entry.name &&
                 match.syncedVersion == match.fileVersion &&
                 match.remoteSize == entry.size
-            if (inSync) return null.also { tally.unchanged++ }
+            if (inSync) return null.also { keepFile(match, row, target, tally) }
             if (match.remoteFileName == null && localSize == entry.size) {
                 store.linkImage(match.id, entry.name, localSize)
-                return null.also { tally.unchanged++ }
+                return null.also { keepFile(match, row, target, tally) }
             }
         }
 
@@ -153,11 +183,10 @@ class NextcloudPull @Inject constructor(
                 album.publish(temp, entry.name, target.name)
             }
             val capturedOn = inspected.capturedOn ?: album.dateTaken(uri)
-            val parts = inspected.caption?.let {
-                EditorialCaption.parse(it, capturedOn, target.location ?: target.likelyLocation())
-            }
-            parts?.location?.let { target.locationsSeen.merge(it, 1, Int::plus) }
-
+            val csvMetadata = row?.let { csvMetadataOf(it, match, capturedOn, target) }
+            val embeddedMetadata = inspected.embedded
+                ?.takeIf { csvMetadata == null && match?.title == null }
+                ?.let { metadataOf(it.title, it.caption, it.keywords, it.category, capturedOn, target) }
             val pulled = PulledImage(
                 remoteFileName = entry.name,
                 mediaStoreUri = uri,
@@ -166,11 +195,8 @@ class NextcloudPull @Inject constructor(
                 heightPx = inspected.heightPx,
                 byteSize = temp.length(),
                 capturedOn = capturedOn,
-                title = inspected.title?.trim()?.ifEmpty { null },
-                description = parts?.body?.ifEmpty { null },
-                captionPlace = parts?.let { it.location.orEmpty() },
-                keywords = inspected.keywords,
-                category = inspected.category?.trim()?.ifEmpty { null },
+                csvMetadata = csvMetadata,
+                embeddedMetadata = embeddedMetadata,
             )
             val now = System.currentTimeMillis()
             if (match != null) {
@@ -190,6 +216,40 @@ class NextcloudPull @Inject constructor(
         }
     }
 
+    /** The file itself is unchanged, but the CSV still wins over the phone's metadata. */
+    private suspend fun keepFile(match: LocalImage, row: CsvRow?, target: Target, tally: Tally) {
+        val changed = row != null && store.applyMetadata(
+            match.id,
+            csvMetadataOf(row, match, match.capturedOn, target),
+            System.currentTimeMillis(),
+        )
+        if (changed) tally.updated++ else tally.unchanged++
+    }
+
+    /** A field the CSV does not give, such as an Adobe-only file's Description, keeps the phone's. */
+    private fun csvMetadataOf(row: CsvRow, match: LocalImage?, capturedOn: String?, target: Target): ParsedMetadata {
+        val parsed = metadataOf(row.title, row.description, row.keywords.orEmpty(), row.category, capturedOn, target)
+        return parsed.copy(
+            description = if (row.description == null) match?.description else parsed.description,
+            captionPlace = if (row.description == null) match?.captionPlace.orEmpty() else parsed.captionPlace,
+            keywords = if (row.keywords == null) match?.keywords.orEmpty() else parsed.keywords,
+            category = if (row.category == null) match?.category else parsed.category,
+        )
+    }
+
+    private fun metadataOf(
+        title: String?,
+        caption: String?,
+        keywords: List<String>,
+        category: String?,
+        capturedOn: String?,
+        target: Target,
+    ): ParsedMetadata {
+        val parsed = ParsedMetadata.of(title, caption, keywords, category, capturedOn, target.location ?: target.likelyLocation())
+        parsed.captionPlace.ifEmpty { null }?.let { target.locationsSeen.merge(it, 1, Int::plus) }
+        return parsed
+    }
+
     private fun outcomeOf(failure: DavResult.Failure): PullOutcome = when (failure) {
         is DavResult.Transient -> PullOutcome.Retry(failure.message)
         is DavResult.AuthRejected -> {
@@ -198,6 +258,8 @@ class NextcloudPull @Inject constructor(
         }
         is DavResult.Fatal, is DavResult.ItemRejected, is DavResult.ParentMissing -> PullOutcome.Failed(failure.message)
     }
+
+    private class RemoteFolder(val name: String, val files: List<DavEntry>, val hasCsv: Boolean)
 
     private class Target(folder: LocalFolder) {
         val id = folder.id
@@ -212,10 +274,11 @@ class NextcloudPull @Inject constructor(
         var newEvents = 0
         var added = 0
         var replaced = 0
+        var updated = 0
         var unchanged = 0
         var skipped = 0
 
-        fun toSummary() = PullSummary(newEvents, added, replaced, unchanged, skipped)
+        fun toSummary() = PullSummary(newEvents, added, replaced, updated, unchanged, skipped)
     }
 
     companion object {
