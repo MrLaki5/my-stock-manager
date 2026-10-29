@@ -23,7 +23,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.SyncImageEntity
         SyncImageEntity::class,
         RemoteDeletionEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -123,6 +123,14 @@ abstract class StockDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE sync_images ADD COLUMN csvVersion INTEGER")
                 db.execSQL("ALTER TABLE sync_folders ADD COLUMN csvVersion INTEGER NOT NULL DEFAULT 1")
                 db.execSQL("ALTER TABLE sync_folders ADD COLUMN csvSyncedVersion INTEGER")
+            }
+        }
+
+        /** Adds MP4 clips alongside photos; every existing row is a photo. */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE images ADD COLUMN mediaKind TEXT NOT NULL DEFAULT 'IMAGE'")
+                db.execSQL("ALTER TABLE images ADD COLUMN durationMs INTEGER")
             }
         }
     }

@@ -3,6 +3,7 @@ package com.mrlaki5.mystockmanager.data.db
 import androidx.room.TypeConverter
 import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -32,6 +33,13 @@ class Converters {
     @TypeConverter
     fun albumStateFromName(value: String): AlbumState =
         runCatching { AlbumState.valueOf(value) }.getOrDefault(AlbumState.PRESENT)
+
+    @TypeConverter
+    fun mediaKindToName(kind: MediaKind): String = kind.name
+
+    @TypeConverter
+    fun mediaKindFromName(value: String): MediaKind =
+        runCatching { MediaKind.valueOf(value) }.getOrDefault(MediaKind.IMAGE)
 
     private companion object {
         val json = Json

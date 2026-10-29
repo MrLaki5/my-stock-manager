@@ -4,20 +4,26 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileDescriptor
 
 /**
- * Downscales a JPEG for the vision model. Full-resolution stock frames are 20-50MP;
- * sending them wastes tokens and upload time without improving keyword quality, so the
- * long edge is capped and the result re-encoded at a modest quality.
+ * Downscales a JPEG or a video frame for the vision model. Full-resolution stock frames are
+ * 20-50MP; sending them wastes tokens and upload time without improving keyword quality, so
+ * the long edge is capped and the result re-encoded at a modest quality.
  */
 object ImageEncoder {
 
     private const val MAX_EDGE = 1024
     private const val QUALITY = 85
 
-    fun toJpeg(file: File): ByteArray {
-        val bitmap = decodeScaled(file) ?: error("Could not decode ${file.name} as an image")
-        return try {
+    fun toJpeg(file: File): ByteArray = compress(decodeScaled(file) ?: error("Could not decode ${file.name} as an image"))
+
+    /** The clip's middle frame, at the same size and quality a photo is sent at. */
+    fun videoFrameToJpeg(fd: FileDescriptor): ByteArray =
+        compress(MediaProbe.middleFrame(fd, MAX_EDGE) ?: error("Could not read a frame from the video"))
+
+    private fun compress(bitmap: Bitmap): ByteArray =
+        try {
             ByteArrayOutputStream().use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, QUALITY, out)
                 out.toByteArray()
@@ -25,7 +31,6 @@ object ImageEncoder {
         } finally {
             bitmap.recycle()
         }
-    }
 
     private fun decodeScaled(file: File): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

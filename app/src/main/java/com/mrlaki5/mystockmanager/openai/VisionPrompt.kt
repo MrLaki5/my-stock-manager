@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.openai
 
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.metadata.model.TITLE_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
@@ -41,9 +42,16 @@ object VisionPrompt {
         Category: choose the single best Shutterstock category, and optionally a secondary one.
     """.trimIndent().replace(SOURCE_LINE_WRAP, " ")
 
-    fun user(hint: String? = null): String = buildString {
+    fun user(hint: String? = null, kind: MediaKind = MediaKind.IMAGE): String = buildString {
         appendLine(BASE)
         appendLine()
+        if (kind == MediaKind.VIDEO) {
+            appendLine(
+                "The image is a still from the middle of a stock video clip. Write the metadata " +
+                    "for the clip as footage, and do not call it a photo."
+            )
+            appendLine()
+        }
         if (hint.isNullOrBlank()) {
             appendLine("There is no hint from the photographer. Set place to null.")
         } else {

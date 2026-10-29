@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.openai
 
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.generation.GenerationResult
 import com.mrlaki5.mystockmanager.generation.MetadataSchema
 import kotlinx.serialization.json.Json
@@ -36,13 +37,14 @@ class OpenAiClient(
         imageBase64Jpeg: String,
         hint: String? = null,
         systemPrompt: String = VisionPrompt.DEFAULT_SYSTEM,
+        kind: MediaKind = MediaKind.IMAGE,
     ): GenerationResult {
         if (apiKey.isBlank()) return GenerationResult.Terminal("No OpenAI API key set. Add one in Settings.", stopsBatch = true)
 
         val request = Request.Builder()
             .url(endpoint)
             .addHeader("Authorization", "Bearer $apiKey")
-            .post(buildRequestBody(model, reasoningEffort, imageBase64Jpeg, hint, systemPrompt).toString().toRequestBody(JSON_MEDIA))
+            .post(buildRequestBody(model, reasoningEffort, imageBase64Jpeg, hint, systemPrompt, kind).toString().toRequestBody(JSON_MEDIA))
             .build()
 
         val response = try {
@@ -126,6 +128,7 @@ class OpenAiClient(
         imageBase64Jpeg: String,
         hint: String?,
         systemPrompt: String,
+        kind: MediaKind,
     ): JsonObject =
         buildJsonObject {
             put("model", model)
@@ -145,7 +148,7 @@ class OpenAiClient(
                             add(
                                 buildJsonObject {
                                     put("type", "text")
-                                    put("text", VisionPrompt.user(hint))
+                                    put("text", VisionPrompt.user(hint, kind))
                                 }
                             )
                             add(

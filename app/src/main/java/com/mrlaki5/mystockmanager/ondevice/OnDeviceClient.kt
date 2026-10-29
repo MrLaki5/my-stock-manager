@@ -8,6 +8,7 @@ import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.generation.GenerationResult
 import com.mrlaki5.mystockmanager.metadata.model.TITLE_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
@@ -38,10 +39,10 @@ class OnDeviceClient @Inject constructor(
     private var engine: Engine? = null
     private var releaseJob: Job? = null
 
-    suspend fun generate(model: File, imageJpeg: ByteArray, hint: String?): GenerationResult = lock.withLock {
+    suspend fun generate(model: File, imageJpeg: ByteArray, hint: String?, kind: MediaKind): GenerationResult = lock.withLock {
         releaseJob?.cancel()
         try {
-            withContext(Dispatchers.IO) { run(model, imageJpeg, hint) }
+            withContext(Dispatchers.IO) { run(model, imageJpeg, hint, kind) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: LinkageError) {
@@ -64,27 +65,27 @@ class OnDeviceClient @Inject constructor(
     }
 
     // One conversation, so the photo is encoded once and every later question is a cheap follow-up.
-    private fun run(model: File, imageJpeg: ByteArray, hint: String?): GenerationResult {
+    private fun run(model: File, imageJpeg: ByteArray, hint: String?, kind: MediaKind): GenerationResult {
         val config = ConversationConfig(
             samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = TEMPERATURE),
             maxOutputToken = MAX_OUTPUT_TOKENS,
         )
         return engineFor(model).createConversation(config).use { conversation ->
             val described = conversation.sendMessage(
-                Contents.of(Content.ImageBytes(imageJpeg), Content.Text(OnDeviceText.descriptionPrompt(hint)))
+                Contents.of(Content.ImageBytes(imageJpeg), Content.Text(OnDeviceText.descriptionPrompt(hint, kind)))
             ).toString()
             val description = OnDeviceText.sentence(described)
             if (description.isEmpty()) return GenerationResult.Terminal("The on-device model returned no description.")
-            val title = OnDeviceText.title(conversation.sendMessage(OnDeviceText.TITLE_PROMPT).toString(), description, TITLE_MAX)
+            val title = OnDeviceText.title(conversation.sendMessage(OnDeviceText.titlePrompt(kind)).toString(), description, TITLE_MAX)
 
             val keywords = mutableListOf<String>()
-            for (question in OnDeviceText.KEYWORD_QUESTIONS) {
+            for (question in OnDeviceText.keywordQuestions(kind)) {
                 if (keywords.size >= OnDeviceText.KEYWORD_TARGET) break
                 val answer = conversation.sendMessage(question, maxOutputToken = MAX_ANSWER_TOKENS).toString()
                 OnDeviceText.keyword(answer, keywords)?.let(keywords::add)
             }
             val category = OnDeviceText.category(
-                conversation.sendMessage(OnDeviceText.CATEGORY_PROMPT, maxOutputToken = MAX_ANSWER_TOKENS).toString()
+                conversation.sendMessage(OnDeviceText.categoryPrompt(kind), maxOutputToken = MAX_ANSWER_TOKENS).toString()
             )
 
             GenerationResult.Success(

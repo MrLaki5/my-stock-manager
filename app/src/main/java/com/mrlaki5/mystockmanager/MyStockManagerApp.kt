@@ -3,6 +3,9 @@ package com.mrlaki5.mystockmanager
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.decode.VideoFrameDecoder
 import com.mrlaki5.mystockmanager.data.repository.StockRepository
 import com.mrlaki5.mystockmanager.nextcloud.SyncCoordinator
 import com.mrlaki5.mystockmanager.storage.AlbumWatcher
@@ -16,7 +19,7 @@ import java.util.concurrent.Executors
 import javax.inject.Inject
 
 @HiltAndroidApp
-class MyStockManagerApp : Application(), Configuration.Provider {
+class MyStockManagerApp : Application(), Configuration.Provider, ImageLoaderFactory {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var repository: StockRepository
@@ -33,6 +36,10 @@ class MyStockManagerApp : Application(), Configuration.Provider {
             // straight into the rate limiter.
             .setExecutor(Executors.newFixedThreadPool(4))
             .build()
+
+    // Thumbnails of MP4 clips are a decoded frame, which Coil only does with this decoder.
+    override fun newImageLoader(): ImageLoader =
+        ImageLoader.Builder(this).components { add(VideoFrameDecoder.Factory()) }.build()
 
     override fun onCreate() {
         super.onCreate()

@@ -1,16 +1,29 @@
 package com.mrlaki5.mystockmanager.ondevice
 
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.openai.SHUTTERSTOCK_CATEGORIES
 
 /** Prompts for the on-device model, and the cleanup of its answers into metadata. */
 object OnDeviceText {
 
-    const val TITLE_PROMPT = "Now write a short title for this photo, at most 10 words. Return only the title."
+    // The model sees one frame of a clip, so it is asked about that frame; photo wording is what was benchmarked.
+    private fun MediaKind.shown(): String = when (this) {
+        MediaKind.IMAGE -> "photo"
+        MediaKind.VIDEO -> "video frame"
+    }
+
+    private fun MediaKind.stock(): String = when (this) {
+        MediaKind.IMAGE -> "stock photo"
+        MediaKind.VIDEO -> "stock video"
+    }
+
+    fun titlePrompt(kind: MediaKind): String =
+        "Now write a short title for this ${kind.shown()}, at most 10 words. Return only the title."
 
     // Short and literal: a 450M model follows one plain instruction far better than a style guide. Asked to
     // "describe what is visible", it says "The image shows..." in a third of answers; a caption names the subject.
-    fun descriptionPrompt(hint: String?): String = buildString {
-        append("Write a one-sentence stock photo caption for this photo. Return only the caption.")
+    fun descriptionPrompt(hint: String?, kind: MediaKind): String = buildString {
+        append("Write a one-sentence ${kind.stock()} caption for this ${kind.shown()}. Return only the caption.")
         if (!hint.isNullOrBlank()) append(" Context from the photographer: ${hint.trim()}.")
     }
 
@@ -52,28 +65,32 @@ object OnDeviceText {
 
     // One narrow question per keyword: asked for "one more keyword", a 450M model repeats itself within a few turns.
     // Ordered by measured usefulness; the last ones only run when earlier answers were rejected.
-    val KEYWORD_QUESTIONS = listOf(
-        "What is the main subject of this photo?",
-        "Name another object visible in this photo.",
+    fun keywordQuestions(kind: MediaKind): List<String> = KEYWORD_QUESTIONS.map {
+        "${it.replace("{shown}", kind.shown())} Answer with one word or a short phrase only."
+    }
+
+    private val KEYWORD_QUESTIONS = listOf(
+        "What is the main subject of this {shown}?",
+        "Name another object visible in this {shown}.",
         "What kind of place or setting is this?",
-        "What is the main colour in this photo?",
-        "What is the lighting or time of day in this photo?",
-        "What material or texture stands out in this photo?",
-        "What action or activity is shown in this photo? Say none if there is none.",
+        "What is the main colour in this {shown}?",
+        "What is the lighting or time of day in this {shown}?",
+        "What material or texture stands out in this {shown}?",
+        "What action or activity is shown in this {shown}? Say none if there is none.",
         "Is this a close-up, aerial view, landscape, portrait, interior or street scene?",
-        "What general topic fits this photo, such as nature, city, food, people, travel, business or technology?",
-        "Name one more object visible in this photo.",
-        "Is there a person, animal, plant, vehicle or building in this photo? Name it.",
-        "What is in the background of this photo?",
-        "What is in the foreground of this photo?",
-        "What second colour appears in this photo?",
-        "What is the sky or weather like in this photo?",
-        "Name one more detail visible in this photo.",
-    ).map { "$it Answer with one word or a short phrase only." }
+        "What general topic fits this {shown}, such as nature, city, food, people, travel, business or technology?",
+        "Name one more object visible in this {shown}.",
+        "Is there a person, animal, plant, vehicle or building in this {shown}? Name it.",
+        "What is in the background of this {shown}?",
+        "What is in the foreground of this {shown}?",
+        "What second colour appears in this {shown}?",
+        "What is the sky or weather like in this {shown}?",
+        "Name one more detail visible in this {shown}.",
+    )
 
     const val KEYWORD_TARGET = 10
 
-    val CATEGORY_PROMPT = "Which one of these categories fits this photo best: " +
+    fun categoryPrompt(kind: MediaKind): String = "Which one of these categories fits this ${kind.shown()} best: " +
         SHUTTERSTOCK_CATEGORIES.joinToString(", ") + "? Answer with the category name only."
 
     /** The keyword in one answer, or null when it is empty, a non-answer, a repeat or a garbled word. */
@@ -135,7 +152,7 @@ object OnDeviceText {
         return cut.trimEnd(',', ' ').ifEmpty { text.take(maxLength) }
     }
 
-    private const val PHOTO = "(image|photo|picture|photograph)"
+    private const val PHOTO = "(image|photo|picture|photograph|video frame|video|clip|footage)"
     private const val FILLER = "(stunning|serene|beautiful|breathtaking|majestic|picturesque|idyllic|gorgeous|tranquil|" +
         "surreal|magnificent|spectacular|captivating|enchanting)"
     private val NON_ANSWERS = setOf("none", "no", "yes", "unknown", "not", "nothing")

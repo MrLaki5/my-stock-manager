@@ -1,7 +1,9 @@
 package com.mrlaki5.mystockmanager.ondevice
 
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OnDeviceTextTest {
@@ -74,5 +76,38 @@ class OnDeviceTextTest {
         val keywords = OnDeviceText.keywords("Belgrade, Serbia", listOf("dog", "cone", "belgrade", "white"))
         assertEquals(listOf("belgrade", "serbia", "dog", "cone", "white"), keywords)
         assertEquals(listOf("dog", "grass"), OnDeviceText.keywords(null, listOf("dog", "grass", "dogs")))
+    }
+
+    @Test
+    fun `photo prompts keep the wording they were benchmarked with`() {
+        assertEquals(
+            "Now write a short title for this photo, at most 10 words. Return only the title.",
+            OnDeviceText.titlePrompt(MediaKind.IMAGE),
+        )
+        assertEquals(
+            "Write a one-sentence stock photo caption for this photo. Return only the caption.",
+            OnDeviceText.descriptionPrompt(null, MediaKind.IMAGE),
+        )
+        assertEquals(
+            "What is the main subject of this photo? Answer with one word or a short phrase only.",
+            OnDeviceText.keywordQuestions(MediaKind.IMAGE).first(),
+        )
+    }
+
+    @Test
+    fun `clip prompts ask about the video frame, never a photo`() {
+        val prompts = listOf(
+            OnDeviceText.titlePrompt(MediaKind.VIDEO),
+            OnDeviceText.descriptionPrompt("Kotor", MediaKind.VIDEO),
+            OnDeviceText.categoryPrompt(MediaKind.VIDEO),
+        ) + OnDeviceText.keywordQuestions(MediaKind.VIDEO)
+        assertTrue(prompts.none { "photo" in it.replace("photographer", "") })
+        assertTrue("stock video caption for this video frame" in OnDeviceText.descriptionPrompt(null, MediaKind.VIDEO))
+    }
+
+    @Test
+    fun `sentence drops talk about the clip itself`() {
+        assertEquals("Waves roll onto a beach.", OnDeviceText.sentence("The video frame shows waves roll onto a beach."))
+        assertEquals("Waves roll onto a beach.", OnDeviceText.sentence("Waves roll onto a beach in this clip."))
     }
 }
