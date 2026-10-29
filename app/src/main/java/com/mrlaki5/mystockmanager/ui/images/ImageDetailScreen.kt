@@ -245,7 +245,7 @@ private fun ImageDetailPage(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            Preview(current, onPlay = { current.mediaStoreUri?.let { openInGallery(context, it, current.mediaKind) } })
+            Preview(current, isCurrent)
 
             current.albumLabel()?.let { label ->
                 AlbumBanner(
@@ -334,9 +334,12 @@ private fun AlbumBanner(label: String, trashed: Boolean, onRestore: () -> Unit) 
     }
 }
 
-/** A clip shows its first frame with a play button that hands it to the phone's player. */
+/** A clip shows its first frame until play is pressed, then plays in place; swiping to another page stops it. */
 @Composable
-private fun Preview(image: ImageEntity, onPlay: () -> Unit) {
+private fun Preview(image: ImageEntity, isCurrent: Boolean) {
+    var playing by remember(image.id) { mutableStateOf(false) }
+    LaunchedEffect(isCurrent) { if (!isCurrent) playing = false }
+
     // Falls back to square only if the stored dimensions are unusable; tall shots are
     // clamped so the metadata below stays reachable without a long scroll.
     val ratio = if (image.widthPx > 0 && image.heightPx > 0) {
@@ -347,15 +350,20 @@ private fun Preview(image: ImageEntity, onPlay: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxWidth().aspectRatio(ratio).background(Color.Black),
     ) {
-        AsyncImage(
-            model = image.mediaStoreUri?.toUri(),
-            contentDescription = image.displayName,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
-        )
-        if (image.mediaKind == MediaKind.VIDEO) {
-            FilledTonalIconButton(onClick = onPlay, modifier = Modifier.align(Alignment.Center).size(56.dp)) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Play video", modifier = Modifier.size(32.dp))
+        val uri = image.mediaStoreUri?.toUri()
+        if (playing && uri != null) {
+            ClipPlayer(uri, Modifier.fillMaxSize())
+        } else {
+            AsyncImage(
+                model = uri,
+                contentDescription = image.displayName,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (image.mediaKind == MediaKind.VIDEO) {
+                FilledTonalIconButton(onClick = { playing = true }, modifier = Modifier.align(Alignment.Center).size(56.dp)) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "Play video", modifier = Modifier.size(32.dp))
+                }
             }
         }
     }
