@@ -146,7 +146,7 @@ interface ImageDao {
 
     @Query(
         "SELECT * FROM images WHERE embeddedChecked = 0 AND title IS NULL AND state != 'GENERATING' " +
-            "AND mediaStoreUri IS NOT NULL AND albumState = 'PRESENT'"
+            "AND mediaStoreUri IS NOT NULL AND albumState = 'PRESENT' AND mediaKind = 'IMAGE'"
     )
     suspend fun getUncheckedForEmbedded(): List<ImageEntity>
 

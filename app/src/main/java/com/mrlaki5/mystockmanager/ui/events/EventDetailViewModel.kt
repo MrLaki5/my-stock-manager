@@ -160,6 +160,7 @@ class EventDetailViewModel @Inject constructor(
         append("Imported ${summary.imported} of ${summary.total}")
         if (summary.duplicates > 0) append(" · ${summary.duplicates} already here")
         if (summary.failed > 0) append(" · ${summary.failed} failed")
+        if (summary.unsupported > 0) append(" · ${summary.unsupported} skipped, only MP4 videos are supported")
     }
 
     fun generateSelected(hint: String?) {

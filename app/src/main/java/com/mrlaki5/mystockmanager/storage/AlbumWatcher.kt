@@ -45,10 +45,11 @@ class AlbumWatcher @Inject constructor(
         }
     }
 
-    /** MediaStore notifies for every photo on the phone, so bursts are collapsed into one check. */
+    /** MediaStore notifies for every photo and video on the phone, so bursts are collapsed into one check. */
     @OptIn(FlowPreview::class)
     fun start(scope: CoroutineScope) {
         context.contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, observer)
+        context.contentResolver.registerContentObserver(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, observer)
         scope.launch {
             changes.onStart { emit(Unit) }.debounce(1.seconds).collect { runCatching { refresh() } }
         }

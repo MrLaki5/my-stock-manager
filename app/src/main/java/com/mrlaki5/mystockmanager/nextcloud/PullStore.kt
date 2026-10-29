@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.nextcloud
 
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.metadata.EmbeddedMetadata
 import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 import java.io.File
@@ -20,6 +21,7 @@ data class LocalImage(
     val remoteFileName: String?,
     val syncedVersion: Long?,
     val remoteSize: Long?,
+    val kind: MediaKind,
 )
 
 /** A downloaded file; without a CSV row, [embeddedMetadata] only fills an image that has no metadata yet. */
@@ -33,6 +35,8 @@ data class PulledImage(
     val capturedOn: String?,
     val csvMetadata: ParsedMetadata?,
     val embeddedMetadata: ParsedMetadata?,
+    val kind: MediaKind = MediaKind.IMAGE,
+    val durationMs: Long? = null,
 )
 
 /** The pull's view of the database. Everything it writes is recorded as already synced, so nothing is sent back up. */
@@ -71,19 +75,23 @@ data class InspectedImage(
     val heightPx: Int,
     val capturedOn: String?,
     val embedded: EmbeddedMetadata?,
+    val kind: MediaKind = MediaKind.IMAGE,
+    val durationMs: Long? = null,
 )
 
 /** The album side of a pull, narrowed so the pull can run against a fake. */
 interface PullAlbum {
     fun newTempFile(): File
 
-    /** Null when the file is not an image the app can use. */
+    /** Null when the file is not a photo or clip the app can use. */
     fun inspect(file: File): InspectedImage?
 
-    fun publish(file: File, displayName: String, eventName: String): String
+    fun publish(file: File, displayName: String, eventName: String, kind: MediaKind): String
 
     /** False when the album entry is gone, so the caller publishes a fresh one instead. */
     fun overwrite(uri: String, file: File): Boolean
+
+    fun delete(uri: String)
 
     fun sizeOf(uri: String): Long?
 

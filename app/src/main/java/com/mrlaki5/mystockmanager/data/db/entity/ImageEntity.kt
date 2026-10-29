@@ -33,6 +33,12 @@ enum class ImageState {
     }
 }
 
+/** Stock photos and stock footage share the pipeline; only reading the file differs. */
+enum class MediaKind(val mimeType: String) {
+    IMAGE("image/jpeg"),
+    VIDEO("video/mp4"),
+}
+
 /** What MediaStore says about the album file, refreshed by `AlbumWatcher`. */
 enum class AlbumState {
     PRESENT,
@@ -101,4 +107,7 @@ data class ImageEntity(
     @ColumnInfo(defaultValue = "PRESENT") val albumState: AlbumState = AlbumState.PRESENT,
     /** When the system trash purges the file; null unless [albumState] is TRASHED and the trash said. */
     val trashExpiresAt: Long? = null,
+    @ColumnInfo(defaultValue = "IMAGE") val mediaKind: MediaKind = MediaKind.IMAGE,
+    /** Clip length, null for images; both agencies only take clips of about 5 to 60 seconds. */
+    val durationMs: Long? = null,
 )

@@ -1,5 +1,6 @@
 package com.mrlaki5.mystockmanager.nextcloud
 
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.metadata.AgencyCsv
 import com.mrlaki5.mystockmanager.metadata.CsvRow
 import com.mrlaki5.mystockmanager.metadata.EmbeddedMetadata
@@ -118,6 +119,23 @@ class NextcloudPullTest {
     }
 
     @Test
+    fun `a cloud clip replacing a phone photo gets a video entry, and the photo entry goes`() {
+        store.addEvent(1, "Beach")
+        store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
+        syncedLocal(10, 1, "Beach/a.mp4", "old")
+        val photoEntry = store.images.getValue(10).uri
+        drive.putFile("Beach/a.mp4", "clip")
+        album.inspectsAs("clip", beachShot.copy(kind = MediaKind.VIDEO, durationMs = 8_000))
+
+        assertEquals(PullSummary(replaced = 1), summary(run()))
+        val image = store.images.getValue(10)
+        assertEquals(MediaKind.VIDEO, image.kind)
+        assertTrue(image.uri.startsWith("content://album/Beach/video/"))
+        assertEquals("clip", String(album.entries.getValue(image.uri)))
+        assertTrue(photoEntry !in album.entries)
+    }
+
+    @Test
     fun `a phone edit not yet uploaded is replaced by the cloud's version`() {
         store.addEvent(1, "Beach")
         store.syncFolders[1] = FakeSyncStore.SyncFolder("Beach", "Beach")
@@ -172,6 +190,20 @@ class NextcloudPullTest {
 
         assertEquals(PullSummary(newEvents = 1, added = 1), summary(run()))
         assertEquals(listOf("GET Beach/a.jpg"), drive.calls.filter { it.startsWith("GET") })
+    }
+
+    @Test
+    fun `an MP4 on the cloud comes back as a clip in the event's album`() {
+        drive.putFile("Beach/waves.mp4", "V")
+        putCsv("Beach", row("waves.mp4"))
+        album.inspectsAs("V", beachShot.copy(kind = MediaKind.VIDEO, durationMs = 12_000))
+
+        assertEquals(PullSummary(newEvents = 1, added = 1), summary(run()))
+        val clip = imageNamed("waves.mp4")
+        assertEquals(MediaKind.VIDEO, clip.kind)
+        assertEquals(12_000L, clip.durationMs)
+        assertEquals("Waves at dusk", clip.title)
+        assertTrue(clip.uri.startsWith("content://album/Beach/video/"))
     }
 
     @Test

@@ -30,6 +30,9 @@ both Adobe Stock and Shutterstock accept, saved on the phone and synced to your 
   is left alone unless you turn on *Remove originals after import* (Android 11+), which
   keeps one copy of each photo in your gallery; the originals wait in the gallery's trash for
   30 days.
+- **Takes MP4 clips as well as photos.** A clip sits in the same album and the same CSV, shows
+  its length on the thumbnail, and gets its metadata from a frame in the middle of the clip.
+  Other video formats are skipped on import.
 - **Notices deletes made in the gallery.** An album image deleted outside the app shows dimmed
   with an "In trash" badge; tap it to restore it. Once the trash empties, it is removed from
   the app too, but any NextCloud copy is kept.

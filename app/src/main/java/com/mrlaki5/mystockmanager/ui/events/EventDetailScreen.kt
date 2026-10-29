@@ -63,10 +63,12 @@ import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
 import com.mrlaki5.mystockmanager.nextcloud.CloudMark
 import com.mrlaki5.mystockmanager.ui.components.AlbumBadge
 import com.mrlaki5.mystockmanager.ui.components.CloudBadge
+import com.mrlaki5.mystockmanager.ui.components.DurationBadge
 import com.mrlaki5.mystockmanager.ui.components.GenerateHintDialog
 import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
 
@@ -170,11 +172,11 @@ fun EventDetailScreen(
                 ExtendedFloatingActionButton(
                     onClick = {
                         picker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                         )
                     },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Add images") },
+                    text = { Text("Add photos & videos") },
                 )
             }
         },
@@ -315,6 +317,11 @@ private fun ImageCell(
 
         cloud?.let { CloudBadge(it, Modifier.align(Alignment.TopStart).padding(4.dp)) }
 
+        // Top end, since a narrow cell has no room beside the state badge; the selection check takes the spot while shown.
+        if (image.mediaKind == MediaKind.VIDEO && !selected) {
+            DurationBadge(image.durationMs, Modifier.align(Alignment.TopEnd).padding(4.dp))
+        }
+
         if (selected) {
             Box(
                 modifier = Modifier
@@ -364,13 +371,13 @@ private fun SelectionBar(count: Int, onDelete: () -> Unit, onGenerate: () -> Uni
 
 @Composable
 private fun RemoveOriginalsDialog(count: Int, onKeep: () -> Unit, onRemove: () -> Unit) {
-    val photos = if (count == 1) "photo" else "$count photos"
+    val files = if (count == 1) "file" else "$count files"
     AlertDialog(
         onDismissRequest = onKeep,
         title = { Text("Remove the originals?") },
         text = {
             Text(
-                "The $photos you imported are now in the StockReady album. Move the originals " +
+                "The $files you imported are now in the StockReady album. Move the originals " +
                     "to the trash so your gallery doesn't show them twice?"
             )
         },

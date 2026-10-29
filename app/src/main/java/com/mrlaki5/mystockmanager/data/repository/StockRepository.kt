@@ -11,6 +11,7 @@ import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.metadata.EmbeddedMetadataReader
 import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 import com.mrlaki5.mystockmanager.metadata.model.StockMetadata
@@ -208,9 +209,13 @@ class StockRepository @Inject constructor(
     suspend fun backfillCaptureDates() = withContext(Dispatchers.IO) {
         for (image in imageDao.getWithoutCaptureDate()) {
             val uri = image.mediaStoreUri?.toUri() ?: continue
-            val captured = runCatching {
-                mediaStore.openInput(uri)?.use { CaptureDate.readFrom(it) }
-            }.getOrNull()
+            // A clip's own date was already read on import, so only MediaStore's is worth asking again.
+            val fromFile = if (image.mediaKind == MediaKind.IMAGE) {
+                runCatching { mediaStore.openInput(uri)?.use { CaptureDate.readFrom(it) } }.getOrNull()
+            } else {
+                null
+            }
+            val captured = fromFile
                 ?: mediaStore.dateTakenMillis(uri)?.let(CaptureDate::fromEpochMillis)
                 ?: continue
             imageDao.setCapturedOn(image.id, captured)
@@ -263,7 +268,7 @@ class StockRepository @Inject constructor(
                 ?: continue
 
             val event = image.folderId?.let { folderDao.observeById(it).first() } ?: continue
-            runCatching { mediaStore.publish(source, image.displayName, event.name) }
+            runCatching { mediaStore.publish(source, image.displayName, event.name, MediaKind.IMAGE) }
                 .onSuccess { uri ->
                     imageDao.markExported(image.id, uri.toString(), System.currentTimeMillis())
                     fileStore.legacyExport(image.id).delete()

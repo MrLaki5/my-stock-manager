@@ -77,7 +77,7 @@ class NextcloudPull @Inject constructor(
                     plan += RemoteFolder(
                         name = folder.name,
                         files = entries.filter {
-                            !it.isCollection && isImageName(it.name) && "${folder.name}/${it.name}" !in pending
+                            !it.isCollection && isMediaName(it.name) && "${folder.name}/${it.name}" !in pending
                         },
                         hasCsv = entries.any { !it.isCollection && it.name == AgencyCsv.FILE_NAME },
                     )
@@ -177,10 +177,15 @@ class NextcloudPull @Inject constructor(
             }
             val inspected = album.inspect(temp) ?: return null.also { tally.skipped++ }
 
-            val uri = if (match != null) {
-                match.mediaStoreUri?.takeIf { album.overwrite(it, temp) } ?: album.publish(temp, match.displayName, target.name)
+            val uri = if (match == null) {
+                album.publish(temp, entry.name, target.name, inspected.kind)
+            } else if (match.kind == inspected.kind) {
+                match.mediaStoreUri?.takeIf { album.overwrite(it, temp) }
+                    ?: album.publish(temp, match.displayName, target.name, inspected.kind)
             } else {
-                album.publish(temp, entry.name, target.name)
+                // MediaStore keeps an entry's type, so a photo turned clip, or back, needs a new entry in the other collection.
+                album.publish(temp, match.displayName, target.name, inspected.kind)
+                    .also { match.mediaStoreUri?.let(album::delete) }
             }
             val capturedOn = inspected.capturedOn ?: album.dateTaken(uri)
             val csvMetadata = row?.let { csvMetadataOf(it, match, capturedOn, target) }
@@ -197,6 +202,8 @@ class NextcloudPull @Inject constructor(
                 capturedOn = capturedOn,
                 csvMetadata = csvMetadata,
                 embeddedMetadata = embeddedMetadata,
+                kind = inspected.kind,
+                durationMs = inspected.durationMs,
             )
             val now = System.currentTimeMillis()
             if (match != null) {
@@ -282,10 +289,10 @@ class NextcloudPull @Inject constructor(
     }
 
     companion object {
-        private val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "heic", "heif", "webp")
+        private val MEDIA_EXTENSIONS = setOf("jpg", "jpeg", "png", "heic", "heif", "webp", "mp4")
 
-        fun isImageName(name: String): Boolean =
-            !name.startsWith(".") && name.substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
+        fun isMediaName(name: String): Boolean =
+            !name.startsWith(".") && name.substringAfterLast('.', "").lowercase() in MEDIA_EXTENSIONS
 
         private fun sha256(file: File): String {
             val digest = MessageDigest.getInstance("SHA-256")

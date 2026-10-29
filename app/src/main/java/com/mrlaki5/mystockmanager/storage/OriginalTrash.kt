@@ -30,19 +30,23 @@ class OriginalTrash @Inject constructor(
      * Null when nothing can be trashed: Android 10, cloud-only picks, or picks that are this
      * app's own album copies, which must never be treated as someone else's original.
      */
-    suspend fun request(sources: List<Uri>): OriginalTrashRequest? = withContext(Dispatchers.IO) {
+    suspend fun request(sources: List<ImportedSource>): OriginalTrashRequest? = withContext(Dispatchers.IO) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return@withContext null
         val ownIds = imageDao.getAlbumRows().mapNotNull { MediaStoreExporter.idOf(it.mediaStoreUri) }.toSet()
-        val ids = sources.mapNotNull(::mediaIdOf).filter { it !in ownIds }.distinct()
-        if (ids.isEmpty()) return@withContext null
-        runCatching { OriginalTrashRequest(mediaStore.trashRequest(ids.map(MediaStoreExporter::imageUri)), ids.size) }
-            .getOrNull()
+        // MediaStore only trashes a clip through a video URI, so each id keeps the kind it was picked as.
+        val originals = sources
+            .mapNotNull { source -> mediaIdOf(source.uri)?.let { it to source.kind } }
+            .filter { (id, _) -> id !in ownIds }
+            .distinctBy { (id, _) -> id }
+        if (originals.isEmpty()) return@withContext null
+        val uris = originals.map { (id, kind) -> MediaStoreExporter.mediaUri(id, kind) }
+        runCatching { OriginalTrashRequest(mediaStore.trashRequest(uris), uris.size) }.getOrNull()
     }
 
     private fun mediaIdOf(uri: Uri): Long? = when (uri.authority) {
         MEDIA_DOCUMENTS -> runCatching { MediaStore.getMediaUri(context, uri) }.getOrNull()
             ?.let { MediaStoreExporter.idOf(it.toString()) }
-        else -> localImageId(uri.authority, uri.pathSegments)
+        else -> localMediaId(uri.authority, uri.pathSegments)
     }
 
     companion object {
@@ -53,11 +57,11 @@ class OriginalTrash @Inject constructor(
          * The MediaStore id behind a Photo Picker or MediaStore URI. A local picker URI ends in the
          * MediaStore id (verified on Android 13, not documented); cloud picks have no local file.
          */
-        fun localImageId(authority: String?, segments: List<String>): Long? {
+        fun localMediaId(authority: String?, segments: List<String>): Long? {
             if (authority != MediaStore.AUTHORITY) return null
             val first = segments.firstOrNull() ?: return null
             val fromPicker = first.startsWith("picker") && LOCAL_PICKER in segments
-            val fromMediaStore = segments.getOrNull(1) == "images" && segments.getOrNull(2) == "media"
+            val fromMediaStore = segments.getOrNull(1) in setOf("images", "video") && segments.getOrNull(2) == "media"
             if (!fromPicker && !fromMediaStore) return null
             return segments.last().toLongOrNull()
         }

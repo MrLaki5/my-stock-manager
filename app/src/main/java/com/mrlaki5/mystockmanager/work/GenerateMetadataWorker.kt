@@ -9,6 +9,7 @@ import androidx.work.WorkerParameters
 import com.mrlaki5.mystockmanager.data.db.dao.ImageDao
 import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.data.prefs.SecureKeyStore
 import com.mrlaki5.mystockmanager.generation.GenerationProvider
 import com.mrlaki5.mystockmanager.ondevice.OnDeviceClient
@@ -27,8 +28,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 /**
- * Generates metadata for exactly one image. The album file is only read; metadata lives in
- * the row and reaches the agencies through the event's CSV.
+ * Generates metadata for exactly one image or clip, a clip from its middle frame. The album
+ * file is only read; metadata lives in the row and reaches the agencies through the event's CSV.
  *
  * One worker per image, not one per batch: that is what gives partial-failure
  * isolation, per-image progress, and independent retry. A failure here marks its own
@@ -99,54 +100,54 @@ class GenerateMetadataWorker @AssistedInject constructor(
         val modelId = if (provider == GenerationProvider.ON_DEVICE) OnDeviceModel.ID else model.id
         val systemPrompt = keyStore.systemPrompt.ifBlank { VisionPrompt.DEFAULT_SYSTEM }
 
-        val source = fileStore.newTempFile("gen-src")
-        try {
-            runCatching { mediaStore.copyTo(mediaUri, source) }
-                .getOrElse { return giveUp(imageId, "Could not read image: ${it.message}") }
-
-            val jpeg = runCatching { ImageEncoder.toJpeg(source) }
-                .getOrElse { return giveUp(imageId, "Could not decode image: ${it.message}") }
-
-            val result = when (provider) {
-                GenerationProvider.OPENAI -> {
-                    val encoded = Base64.encodeToString(jpeg, Base64.NO_WRAP)
-                    openAiClient.generate(apiKey, model.id, model.effective(keyStore.reasoningEffort), encoded, hint, systemPrompt)
-                }
-                GenerationProvider.ON_DEVICE -> onDeviceClient.generate(onDeviceModel!!, jpeg, hint)
+        val jpeg = when (image.mediaKind) {
+            MediaKind.IMAGE -> fileStore.withTempFile("gen-src") { source ->
+                runCatching { mediaStore.copyTo(mediaUri, source) }
+                    .getOrElse { return giveUp(imageId, "Could not read image: ${it.message}") }
+                runCatching { ImageEncoder.toJpeg(source) }
+                    .getOrElse { return giveUp(imageId, "Could not decode image: ${it.message}") }
             }
-            return when (result) {
-                is GenerationResult.Transient -> if (runAttemptCount + 1 < MAX_ATTEMPTS) {
-                    // Stays GENERATING: a retry really is still in flight.
-                    imageDao.markFailed(imageId, ImageState.GENERATING, result.message)
-                    Result.retry()
-                } else {
-                    giveUp(imageId, result.message)
-                }
+            MediaKind.VIDEO -> runCatching { mediaStore.withDescriptor(mediaUri, ImageEncoder::videoFrameToJpeg) }
+                .getOrElse { return giveUp(imageId, "Could not read video: ${it.message}") }
+        }
 
-                is GenerationResult.Terminal -> giveUp(imageId, result.message, result.stopsBatch)
-
-                // Once the model has answered, save it even if cancelled.
-                is GenerationResult.Success -> withContext(NonCancellable) {
-                    // Only a hint can name the place; a model guessing one from pixels is ignored.
-                    val place = result.place.takeIf { hint != null }
-                    // The row keeps the caption body; the CSV prepends the lead when it is written.
-                    val written = result.metadata.normalized()
-                    imageDao.saveGenerated(
-                        id = imageId,
-                        title = written.title,
-                        description = written.description,
-                        keywords = written.keywords,
-                        category = written.category,
-                        state = ImageState.GENERATED,
-                        generatedAt = System.currentTimeMillis(),
-                        model = modelId,
-                        captionPlace = place.orEmpty(),
-                    )
-                    Result.success()
-                }
+        val result = when (provider) {
+            GenerationProvider.OPENAI -> {
+                val encoded = Base64.encodeToString(jpeg, Base64.NO_WRAP)
+                openAiClient.generate(apiKey, model.id, model.effective(keyStore.reasoningEffort), encoded, hint, systemPrompt, image.mediaKind)
             }
-        } finally {
-            source.delete()
+            GenerationProvider.ON_DEVICE -> onDeviceClient.generate(onDeviceModel!!, jpeg, hint, image.mediaKind)
+        }
+        return when (result) {
+            is GenerationResult.Transient -> if (runAttemptCount + 1 < MAX_ATTEMPTS) {
+                // Stays GENERATING: a retry really is still in flight.
+                imageDao.markFailed(imageId, ImageState.GENERATING, result.message)
+                Result.retry()
+            } else {
+                giveUp(imageId, result.message)
+            }
+
+            is GenerationResult.Terminal -> giveUp(imageId, result.message, result.stopsBatch)
+
+            // Once the model has answered, save it even if cancelled.
+            is GenerationResult.Success -> withContext(NonCancellable) {
+                // Only a hint can name the place; a model guessing one from pixels is ignored.
+                val place = result.place.takeIf { hint != null }
+                // The row keeps the caption body; the CSV prepends the lead when it is written.
+                val written = result.metadata.normalized()
+                imageDao.saveGenerated(
+                    id = imageId,
+                    title = written.title,
+                    description = written.description,
+                    keywords = written.keywords,
+                    category = written.category,
+                    state = ImageState.GENERATED,
+                    generatedAt = System.currentTimeMillis(),
+                    model = modelId,
+                    captionPlace = place.orEmpty(),
+                )
+                Result.success()
+            }
         }
     }
 

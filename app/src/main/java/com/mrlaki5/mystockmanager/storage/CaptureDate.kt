@@ -1,7 +1,7 @@
 package com.mrlaki5.mystockmanager.storage
 
 import android.media.ExifInterface
-import java.io.File
+import java.io.FileDescriptor
 import java.io.InputStream
 import java.time.Instant
 import java.time.LocalDateTime
@@ -27,8 +27,11 @@ object CaptureDate {
 
     private val EXIF_FORMAT = DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss", Locale.US)
 
-    fun readFrom(file: File): String? =
-        runCatching { parse(ExifInterface(file.absolutePath)) }.getOrNull()
+    // MediaMetadataRetriever's rendering of an MP4 creation time, which is UTC.
+    private val MP4_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss[.SSS]'Z'", Locale.US)
+
+    fun readFrom(fd: FileDescriptor): String? =
+        runCatching { parse(ExifInterface(fd)) }.getOrNull()
 
     /** Reads only the header, so this never pulls a whole album file through memory. */
     fun readFrom(stream: InputStream): String? =
@@ -41,6 +44,13 @@ object CaptureDate {
      */
     fun fromEpochMillis(millis: Long): String =
         Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+
+    /** MP4 stores an instant, so it is placed in [zone] like [fromEpochMillis]; an unset time reads as 1904, the MP4 epoch. */
+    fun fromMp4(raw: String, zone: ZoneId = ZoneId.systemDefault()): String? = runCatching {
+        val utc = LocalDateTime.parse(raw.trim(), MP4_FORMAT)
+        if (utc.year < 1971) return null
+        utc.atZone(ZoneId.of("UTC")).withZoneSameInstant(zone).toLocalDate().toString()
+    }.getOrNull()
 
     private fun parse(exif: ExifInterface): String? {
         val raw = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)

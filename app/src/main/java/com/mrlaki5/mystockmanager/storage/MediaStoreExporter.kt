@@ -10,8 +10,10 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.metadata.AgencyCsv
 import java.io.File
+import java.io.FileDescriptor
 import java.io.InputStream
 
 /** One of the app's event CSVs; MediaStore keeps the type a file was created with. */
@@ -31,26 +33,31 @@ data class AlbumEntry(val trashed: Boolean, val expiresAt: Long?)
  */
 class MediaStoreExporter(private val context: Context) {
 
-    private val collection: Uri
-        get() = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    // Photos and clips share one id space here, so album lookups need not know which an id is.
+    private val allFiles: Uri
+        get() = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
 
-    /** Inserts a new image into the event's album and returns its MediaStore URI. */
-    fun publish(source: File, displayName: String, eventName: String): Uri {
+    /** Inserts a new file into the event's album and returns its MediaStore URI. */
+    fun publish(source: File, displayName: String, eventName: String, kind: MediaKind): Uri =
+        publish(displayName, eventName, kind) { source.inputStream() }
+
+    /** Like the file version, but streams [open]'s bytes in, so the caller needs no copy of its own first. */
+    fun publish(displayName: String, eventName: String, kind: MediaKind, open: () -> InputStream): Uri {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.MIME_TYPE, kind.mimeType)
             put(MediaStore.Images.Media.RELATIVE_PATH, relativePathFor(eventName))
             // Hides the row from other apps until the bytes are fully written.
             put(MediaStore.Images.Media.IS_PENDING, 1)
         }
 
-        val uri = resolver.insert(collection, values)
+        val uri = resolver.insert(collectionFor(kind), values)
             ?: error("MediaStore refused to create an entry for $displayName")
 
         try {
             resolver.openOutputStream(uri)?.use { out ->
-                source.inputStream().use { it.copyTo(out) }
+                open().use { it.copyTo(out) }
             } ?: error("Could not open an output stream for $uri")
 
             resolver.update(
@@ -82,6 +89,11 @@ class MediaStoreExporter(private val context: Context) {
 
     /** Opens the entry for reading. For callers that only need the header, not the pixels. */
     fun openInput(uri: Uri): InputStream? = context.contentResolver.openInputStream(uri)
+
+    /** For reading a clip in place: a video decoder seeks, so it cannot work from a stream. */
+    fun <T> withDescriptor(uri: Uri, block: (FileDescriptor) -> T): T =
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { block(it.fileDescriptor) }
+            ?: error("Could not open $uri for reading")
 
     /**
      * What MediaStore believes the capture time was, in epoch millis, or null if it does
@@ -141,7 +153,7 @@ class MediaStoreExporter(private val context: Context) {
             val args = chunk.map(Long::toString).toTypedArray()
             val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 context.contentResolver.query(
-                    collection,
+                    allFiles,
                     arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.IS_TRASHED, MediaStore.MediaColumns.DATE_EXPIRES),
                     Bundle().apply {
                         putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
@@ -151,7 +163,7 @@ class MediaStoreExporter(private val context: Context) {
                     null,
                 )
             } else {
-                context.contentResolver.query(collection, arrayOf(MediaStore.MediaColumns._ID), selection, args, null)
+                context.contentResolver.query(allFiles, arrayOf(MediaStore.MediaColumns._ID), selection, args, null)
             } ?: return null
             cursor.use {
                 while (it.moveToNext()) {
@@ -177,30 +189,13 @@ class MediaStoreExporter(private val context: Context) {
     fun trashRequest(uris: List<Uri>): PendingIntent =
         MediaStore.createTrashRequest(context.contentResolver, uris, true)
 
-    fun listEvent(eventName: String): List<Uri> {
-        val uris = mutableListOf<Uri>()
-        context.contentResolver.query(
-            collection,
-            arrayOf(MediaStore.Images.Media._ID),
-            "${MediaStore.Images.Media.RELATIVE_PATH} = ?",
-            arrayOf(relativePathFor(eventName)),
-            null,
-        )?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            while (cursor.moveToNext()) {
-                uris += ContentUris.withAppendedId(collection, cursor.getLong(idColumn))
-            }
-        }
-        return uris
-    }
-
     /** File names by MediaStore id, which can differ from the name asked for: MediaStore swaps characters like ':' for '_'. */
     fun displayNames(ids: Collection<Long>): Map<Long, String>? {
         val found = mutableMapOf<Long, String>()
         // Chunked because API 29's SQLite caps a statement at 999 bound variables.
         for (chunk in ids.chunked(500)) {
             context.contentResolver.query(
-                collection,
+                allFiles,
                 arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME),
                 "${MediaStore.MediaColumns._ID} IN (${chunk.joinToString(",") { "?" }})",
                 chunk.map(Long::toString).toTypedArray(),
@@ -288,9 +283,14 @@ class MediaStoreExporter(private val context: Context) {
         /** The MediaStore id at the end of an entry URI, or null if it does not end in one. */
         fun idOf(uri: String): Long? = uri.substringAfterLast('/').toLongOrNull()
 
-        /** The URI of any image on the phone by its MediaStore id, whichever volume it is on. */
-        fun imageUri(id: Long): Uri =
-            ContentUris.withAppendedId(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), id)
+        /** The URI of any photo or clip on the phone by its MediaStore id, whichever volume it is on. */
+        fun mediaUri(id: Long, kind: MediaKind): Uri =
+            ContentUris.withAppendedId(collectionFor(kind, MediaStore.VOLUME_EXTERNAL), id)
+
+        private fun collectionFor(kind: MediaKind, volume: String = MediaStore.VOLUME_EXTERNAL_PRIMARY): Uri = when (kind) {
+            MediaKind.IMAGE -> MediaStore.Images.Media.getContentUri(volume)
+            MediaKind.VIDEO -> MediaStore.Video.Media.getContentUri(volume)
+        }
 
         /**
          * The album name a picker shows. MediaStore buckets are flat — the picker groups

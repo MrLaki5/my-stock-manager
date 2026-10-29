@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -35,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -70,6 +72,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.mrlaki5.mystockmanager.data.db.entity.AlbumState
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.metadata.model.TITLE_MAX
 import com.mrlaki5.mystockmanager.metadata.model.MAX_KEYWORDS
 import com.mrlaki5.mystockmanager.metadata.model.MIN_KEYWORDS
@@ -78,6 +81,7 @@ import com.mrlaki5.mystockmanager.ui.components.CloudBadge
 import com.mrlaki5.mystockmanager.ui.components.GenerateHintDialog
 import com.mrlaki5.mystockmanager.ui.components.ImageStateBadge
 import com.mrlaki5.mystockmanager.ui.components.albumLabel
+import com.mrlaki5.mystockmanager.ui.components.formatDuration
 import com.mrlaki5.mystockmanager.ui.components.label
 
 /** Pages through the event's images in grid order, starting at the one that was opened. */
@@ -201,9 +205,10 @@ private fun ImageDetailPage(
                     }
                 },
                 actions = {
-                    val uri = image?.mediaStoreUri
+                    val shown = image
+                    val uri = shown?.mediaStoreUri
                     if (uri != null) {
-                        IconButton(onClick = { openInGallery(context, uri) }) {
+                        IconButton(onClick = { openInGallery(context, uri, shown.mediaKind) }) {
                             Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in gallery")
                         }
                     }
@@ -240,7 +245,7 @@ private fun ImageDetailPage(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            Preview(current)
+            Preview(current, onPlay = { current.mediaStoreUri?.let { openInGallery(context, it, current.mediaKind) } })
 
             current.albumLabel()?.let { label ->
                 AlbumBanner(
@@ -257,7 +262,8 @@ private fun ImageDetailPage(
             ) {
                 ImageStateBadge(state = current.state)
                 Text(
-                    "${current.widthPx} × ${current.heightPx}",
+                    listOfNotNull("${current.widthPx} × ${current.heightPx}", current.durationMs?.let(::formatDuration))
+                        .joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -328,8 +334,9 @@ private fun AlbumBanner(label: String, trashed: Boolean, onRestore: () -> Unit) 
     }
 }
 
+/** A clip shows its first frame with a play button that hands it to the phone's player. */
 @Composable
-private fun Preview(image: ImageEntity) {
+private fun Preview(image: ImageEntity, onPlay: () -> Unit) {
     // Falls back to square only if the stored dimensions are unusable; tall shots are
     // clamped so the metadata below stays reachable without a long scroll.
     val ratio = if (image.widthPx > 0 && image.heightPx > 0) {
@@ -346,6 +353,11 @@ private fun Preview(image: ImageEntity) {
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
         )
+        if (image.mediaKind == MediaKind.VIDEO) {
+            FilledTonalIconButton(onClick = onPlay, modifier = Modifier.align(Alignment.Center).size(56.dp)) {
+                Icon(Icons.Default.PlayArrow, contentDescription = "Play video", modifier = Modifier.size(32.dp))
+            }
+        }
     }
 }
 
@@ -692,9 +704,9 @@ private fun NoMetadataHint(modifier: Modifier = Modifier) {
  * MediaStore item, so it needs no FileProvider grant — only a read permission on the
  * receiving side, which the flag supplies.
  */
-private fun openInGallery(context: android.content.Context, mediaStoreUri: String) {
+private fun openInGallery(context: android.content.Context, mediaStoreUri: String, kind: MediaKind) {
     val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(mediaStoreUri.toUri(), "image/jpeg")
+        setDataAndType(mediaStoreUri.toUri(), kind.mimeType)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     runCatching { context.startActivity(intent) }

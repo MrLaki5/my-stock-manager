@@ -1,6 +1,7 @@
 package com.mrlaki5.mystockmanager.nextcloud
 
 import com.mrlaki5.mystockmanager.data.db.dao.CsvImageRow
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.metadata.model.ParsedMetadata
 import java.io.InputStream
 
@@ -18,6 +19,8 @@ class FakeSyncStore : SyncStore, PullStore {
         var captionPlace: String? = null
         var metadataVersion = 1L
         var generating = false
+        var kind = MediaKind.IMAGE
+        var durationMs: Long? = null
     }
     data class SyncFolder(
         val remoteName: String,
@@ -247,7 +250,7 @@ class FakeSyncStore : SyncStore, PullStore {
             LocalImage(
                 image.id, image.displayName, image.uri, image.fileVersion, image.capturedOn, image.title,
                 image.description, image.captionPlace, image.keywords, image.category,
-                sync?.remoteFileName, sync?.syncedVersion, sync?.remoteSize,
+                sync?.remoteFileName, sync?.syncedVersion, sync?.remoteSize, image.kind,
             )
         }
 
@@ -321,6 +324,8 @@ class FakeSyncStore : SyncStore, PullStore {
     private fun Image.fillFrom(image: PulledImage) {
         uri = image.mediaStoreUri
         capturedOn = image.capturedOn
+        kind = image.kind
+        durationMs = image.durationMs
     }
 
     private fun Image.fillFrom(metadata: ParsedMetadata) {
@@ -489,10 +494,14 @@ class FakeAlbum(private val dir: java.io.File) : PullAlbum {
 
     override fun inspect(file: java.io.File): InspectedImage? = inspections[file.readText()]
 
-    override fun publish(file: java.io.File, displayName: String, eventName: String): String {
-        val uri = "content://album/$eventName/${next++}"
+    override fun publish(file: java.io.File, displayName: String, eventName: String, kind: MediaKind): String {
+        val uri = "content://album/$eventName/${kind.name.lowercase()}/${next++}"
         entries[uri] = file.readBytes()
         return uri
+    }
+
+    override fun delete(uri: String) {
+        entries.remove(uri)
     }
 
     override fun overwrite(uri: String, file: java.io.File): Boolean {

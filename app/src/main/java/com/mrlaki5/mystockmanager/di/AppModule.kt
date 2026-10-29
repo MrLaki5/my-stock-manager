@@ -45,6 +45,7 @@ object AppModule {
                 StockDatabase.MIGRATION_6_7,
                 StockDatabase.MIGRATION_7_8,
                 StockDatabase.MIGRATION_8_9,
+                StockDatabase.MIGRATION_9_10,
             )
             .build()
 

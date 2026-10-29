@@ -8,6 +8,7 @@ import androidx.room.Upsert
 import com.mrlaki5.mystockmanager.data.db.entity.FolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageEntity
 import com.mrlaki5.mystockmanager.data.db.entity.ImageState
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.data.db.entity.SyncFolderEntity
 import com.mrlaki5.mystockmanager.data.db.entity.SyncImageEntity
 import com.mrlaki5.mystockmanager.nextcloud.LocalFolder
@@ -35,7 +36,7 @@ abstract class PullDao : PullStore {
             i.fileVersion AS fileVersion, i.capturedOn AS capturedOn, i.title AS title,
             i.description AS description, i.captionPlace AS captionPlace, i.keywords AS keywords,
             i.category AS category, s.remoteFileName AS remoteFileName,
-            s.syncedVersion AS syncedVersion, s.remoteSize AS remoteSize
+            s.syncedVersion AS syncedVersion, s.remoteSize AS remoteSize, i.mediaKind AS kind
         FROM images i LEFT JOIN sync_images s ON s.imageId = i.id
         WHERE i.folderId = :folderId
         """
@@ -80,6 +81,8 @@ abstract class PullDao : PullStore {
                 generatedAt = now.takeIf { metadata?.generated == true },
                 mediaStoreUri = image.mediaStoreUri,
                 embeddedChecked = true,
+                mediaKind = image.kind,
+                durationMs = image.durationMs,
             )
         )
         // Matches the cloud CSV, row or no row, unless the metadata came from the file and is not in it yet.
@@ -98,6 +101,8 @@ abstract class PullDao : PullStore {
             byteSize = image.byteSize,
             capturedOn = image.capturedOn,
             mediaStoreUri = image.mediaStoreUri,
+            mediaKind = image.kind,
+            durationMs = image.durationMs,
         )
         // The bumped version is recorded as synced, so the replaced file is not uploaded straight back.
         upsertSyncImage(
@@ -172,7 +177,8 @@ abstract class PullDao : PullStore {
         """
         UPDATE images
         SET sha256 = :sha256, widthPx = :widthPx, heightPx = :heightPx, byteSize = :byteSize,
-            capturedOn = :capturedOn, mediaStoreUri = :mediaStoreUri, fileVersion = fileVersion + 1,
+            capturedOn = :capturedOn, mediaStoreUri = :mediaStoreUri, mediaKind = :mediaKind, durationMs = :durationMs,
+            fileVersion = fileVersion + 1,
             metadataVersion = metadataVersion + (capturedOn IS NOT :capturedOn),
             albumState = 'PRESENT', trashExpiresAt = NULL, embeddedChecked = 1
         WHERE id = :id
@@ -186,6 +192,8 @@ abstract class PullDao : PullStore {
         byteSize: Long,
         capturedOn: String?,
         mediaStoreUri: String,
+        mediaKind: MediaKind,
+        durationMs: Long?,
     )
 
     // Leaves an identical row alone, NULL and '' alike, so pulling again is not reported as an update.

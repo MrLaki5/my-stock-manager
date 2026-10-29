@@ -1,9 +1,12 @@
 package com.mrlaki5.mystockmanager.metadata
 
+import android.content.ContentUris
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.provider.MediaStore
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.ImageEncoder
 import com.mrlaki5.mystockmanager.storage.MediaStoreExporter
@@ -70,7 +73,7 @@ class OnDeviceMetadataTest {
         val exporter = MediaStoreExporter(context)
         val stamp = System.currentTimeMillis()
         val events = listOf("Test Harbour $stamp", "Test Market $stamp")
-        val uris = events.map { event -> exporter.publish(destination, "test-$stamp.jpg", event) }
+        val uris = events.map { event -> exporter.publish(destination, "test-$stamp.jpg", event, MediaKind.IMAGE) }
 
         uris.forEach { uri ->
             context.contentResolver.openInputStream(uri).use { input ->
@@ -98,12 +101,25 @@ class OnDeviceMetadataTest {
 
         val exporter = MediaStoreExporter(context)
         val event = "Test Disposable ${System.currentTimeMillis()}"
-        exporter.publish(destination, "disposable.jpg", event)
-        val listed = exporter.listEvent(event)
+        exporter.publish(destination, "disposable.jpg", event, MediaKind.IMAGE)
+        val listed = listEvent(event)
         assertTrue("nothing published", listed.isNotEmpty())
 
         listed.forEach { exporter.delete(it) }
-        assertEquals(emptyList<Any>(), exporter.listEvent(event))
+        assertEquals(emptyList<Any>(), listEvent(event))
+    }
+
+    private fun listEvent(eventName: String): List<android.net.Uri> {
+        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        return context.contentResolver.query(
+            collection,
+            arrayOf(MediaStore.MediaColumns._ID),
+            "${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+            arrayOf(MediaStoreExporter.relativePathFor(eventName)),
+            null,
+        )?.use { cursor ->
+            buildList { while (cursor.moveToNext()) add(ContentUris.withAppendedId(collection, cursor.getLong(0))) }
+        }.orEmpty()
     }
 
     private fun bucketDisplayNameOf(uri: android.net.Uri): String? =

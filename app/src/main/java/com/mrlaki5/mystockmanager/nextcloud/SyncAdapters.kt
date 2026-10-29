@@ -1,11 +1,12 @@
 package com.mrlaki5.mystockmanager.nextcloud
 
-import android.graphics.BitmapFactory
 import androidx.core.net.toUri
+import com.mrlaki5.mystockmanager.data.db.entity.MediaKind
 import com.mrlaki5.mystockmanager.metadata.EmbeddedMetadataReader
 import com.mrlaki5.mystockmanager.storage.AppFileStore
 import com.mrlaki5.mystockmanager.storage.CaptureDate
 import com.mrlaki5.mystockmanager.storage.MediaStoreExporter
+import com.mrlaki5.mystockmanager.storage.MediaProbe
 import okhttp3.OkHttpClient
 import java.io.File
 import java.io.FileNotFoundException
@@ -45,14 +46,17 @@ class PullAlbumFiles @Inject constructor(
     override fun newTempFile(): File = fileStore.newTempFile("pull")
 
     override fun inspect(file: File): InspectedImage? {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.absolutePath, bounds)
-        if (bounds.outWidth <= 0) return null
-        return InspectedImage(bounds.outWidth, bounds.outHeight, CaptureDate.readFrom(file), EmbeddedMetadataReader.read(file))
+        val probed = file.inputStream().use { MediaProbe.inspect(it.fd) } ?: return null
+        val embedded = if (probed.kind == MediaKind.IMAGE) EmbeddedMetadataReader.read(file) else null
+        return InspectedImage(probed.widthPx, probed.heightPx, probed.capturedOn, embedded, probed.kind, probed.durationMs)
     }
 
-    override fun publish(file: File, displayName: String, eventName: String): String =
-        mediaStore.publish(file, displayName, eventName).toString()
+    override fun publish(file: File, displayName: String, eventName: String, kind: MediaKind): String =
+        mediaStore.publish(file, displayName, eventName, kind).toString()
+
+    override fun delete(uri: String) {
+        mediaStore.delete(uri.toUri())
+    }
 
     override fun overwrite(uri: String, file: File): Boolean {
         val entry = uri.toUri()
